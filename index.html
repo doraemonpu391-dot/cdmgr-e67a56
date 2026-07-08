@@ -350,7 +350,8 @@
     <div class="panel-card">
       <div class="stat-row">
         <div class="stat-box"><div class="label">在售商品數</div><div class="value" id="statActiveListings">0</div></div>
-        <div class="stat-box"><div class="label">在售商品總值</div><div class="value" id="statActiveValue">NT$0</div></div>
+        <div class="stat-box"><div class="label">保留中</div><div class="value" id="statReservedCount">0</div></div>
+        <div class="stat-box"><div class="label">商品總值</div><div class="value" id="statTotalValue">NT$0</div></div>
       </div>
       <div class="toolbar">
         <input type="text" id="listingSearch" class="search-input" placeholder="搜尋藝人／專輯...">
@@ -1712,9 +1713,12 @@ function renderListings(){
 
 function updateListingStats(){
   const active = listings.filter(l => l.status === '在售');
-  const totalValue = active.reduce((sum,l)=> sum + (parseFloat(l.price)||0), 0);
+  const reserved = listings.filter(l => l.status === '保留中');
+  // 商品總值：涵蓋所有商品（不分狀態）
+  const totalValue = listings.reduce((sum,l)=> sum + (parseFloat(l.price)||0), 0);
   document.getElementById('statActiveListings').textContent = active.length;
-  document.getElementById('statActiveValue').textContent = fmtMoney(totalValue);
+  document.getElementById('statReservedCount').textContent = reserved.length;
+  document.getElementById('statTotalValue').textContent = fmtMoney(totalValue);
 }
 function updateSelectionUI(){
   document.getElementById('selectedCountLabel').textContent = `已選取 ${selectedListingIds.size} 筆`;
