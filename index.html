@@ -1,0 +1,2613 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>CD 出貨管理系統</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#121319">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CD管理系統">
+<link rel="apple-touch-icon" href="pwa/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#121319; --surface:#1b1d26; --surface-2:#22242f; --surface-3:#181a22;
+    --line:#33364280; --gold:#e8b94a; --gold-deep:#c99a2e; --teal:#4fd1c5;
+    --text:#f4f2ea; --text-muted:#9698a6; --danger:#e2694f; --danger-deep:#c14f37;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(circle at 15% -10%, #22243088 0%, transparent 45%),
+      radial-gradient(circle at 90% 10%, #1c3a3620 0%, transparent 40%),
+      var(--bg);
+    color:var(--text); font-family:'Noto Sans TC', sans-serif; min-height:100vh;
+  }
+  .wrap{max-width:1360px;margin:0 auto;padding:32px 20px 80px;}
+
+  header{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;justify-content:space-between;margin-bottom:20px;}
+  .brandmark{display:flex;align-items:center;gap:12px;}
+  .disc{width:42px;height:42px;border-radius:50%;background:conic-gradient(from 90deg,#3a3d4a,#55586a,#3a3d4a,#202230);position:relative;flex-shrink:0;box-shadow:inset 0 0 0 2px #0003,0 2px 8px #0006;}
+  .disc::after{content:"";position:absolute;inset:0;margin:auto;width:13px;height:13px;border-radius:50%;background:var(--gold);}
+  h1{font-family:'Bebas Neue',sans-serif;font-size:30px;letter-spacing:1.5px;margin:0;line-height:1;}
+  .sub{color:var(--text-muted);font-size:13px;margin-top:5px;}
+
+  nav.tabs{display:flex;gap:6px;margin-bottom:22px;border-bottom:1px solid var(--line);flex-wrap:wrap;}
+  nav.tabs button{background:transparent;border:none;color:var(--text-muted);font-family:'Noto Sans TC',sans-serif;font-weight:700;font-size:14px;padding:12px 16px;cursor:pointer;border-bottom:2px solid transparent;display:flex;align-items:center;gap:7px;}
+  nav.tabs button .badge{background:var(--surface-2);color:var(--text-muted);font-family:'JetBrains Mono',monospace;font-size:11px;padding:1px 7px;border-radius:10px;}
+  nav.tabs button.active{color:var(--gold);border-bottom-color:var(--gold);}
+  nav.tabs button.active .badge{background:#e8b94a22;color:var(--gold);}
+
+  .tab-panel{display:none;} .tab-panel.active{display:block;}
+
+  .panel-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px;margin-bottom:22px;}
+  .panel-card h2{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;margin:0 0 16px;display:flex;align-items:center;gap:8px;}
+  .panel-card h2 .count{color:var(--gold);font-family:'JetBrains Mono',monospace;font-size:14px;}
+  .row-between{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px;}
+
+  .stat-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px;}
+  .stat-box{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:12px 16px;min-width:130px;}
+  .stat-box .label{font-size:11px;color:var(--text-muted);letter-spacing:.5px;}
+  .stat-box .value{font-family:'JetBrains Mono',monospace;font-size:20px;color:var(--gold);margin-top:4px;}
+
+  label.field{display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;letter-spacing:.5px;}
+  input[type=text],input[type=number],input[type=date],input[type=datetime-local],select,textarea{
+    background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;
+    font-family:'Noto Sans TC',sans-serif;font-size:13px;outline:none;transition:border-color .15s ease;width:100%;
+  }
+  input[type=number]{font-family:'JetBrains Mono',monospace;}
+  input[type=date]::-webkit-calendar-picker-indicator,input[type=datetime-local]::-webkit-calendar-picker-indicator{filter:invert(0.7);cursor:pointer;}
+  input:focus,select:focus,textarea:focus{border-color:var(--gold);}
+  select{cursor:pointer;}
+  textarea.mono-box{font-family:'Noto Sans TC',sans-serif;line-height:1.7;white-space:pre-wrap;resize:vertical;}
+
+  button.primary{background:linear-gradient(180deg,var(--gold),var(--gold-deep));color:#1a1305;border:none;font-family:'Bebas Neue',sans-serif;letter-spacing:1px;font-size:16px;padding:10px 22px;border-radius:9px;cursor:pointer;white-space:nowrap;}
+  button.primary:hover:not(:disabled){filter:brightness(1.08);}
+  button.primary:disabled{opacity:.45;cursor:not-allowed;}
+  button.secondary{background:transparent;border:1px solid var(--teal);color:var(--teal);font-weight:700;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;white-space:nowrap;}
+  button.secondary:hover{background:#4fd1c515;}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--text-muted);padding:6px 12px;border-radius:7px;cursor:pointer;font-size:12px;white-space:nowrap;}
+  button.ghost:hover{border-color:var(--gold);color:var(--gold);}
+  button.danger-ghost{background:transparent;border:1px solid var(--danger-deep);color:var(--danger);padding:6px 12px;border-radius:7px;cursor:pointer;font-size:12px;white-space:nowrap;}
+  button.danger-ghost:hover{background:#e2694f18;}
+  button.small-icon{background:var(--surface-2);border:1px solid var(--line);color:var(--text-muted);padding:6px 8px;border-radius:6px;cursor:pointer;font-size:11px;}
+  button.small-icon:hover{color:var(--gold);border-color:var(--gold-deep);}
+
+  .note-banner{background:#e8b94a12;border:1px solid #e8b94a35;color:var(--text-muted);border-radius:9px;padding:10px 14px;font-size:12.5px;margin-bottom:18px;line-height:1.6;}
+  .note-banner b{color:var(--gold);}
+  .copy-hint{color:var(--teal);font-size:12.5px;opacity:0;transition:opacity .2s ease;align-self:center;}
+  .copy-hint.show{opacity:1;}
+
+  /* ---- Composer ---- */
+  .composer-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:24px;}
+  .slot-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;position:relative;}
+  .slot-card.filled{border-color:var(--gold-deep);}
+  .tag-corner{position:absolute;top:-1px;left:-1px;width:28px;height:28px;background:var(--surface-2);border:1px solid var(--line);border-radius:14px 0 12px 0;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-muted);}
+  .slot-card.filled .tag-corner{color:var(--gold);border-color:var(--gold-deep);}
+  .drop{width:100%;aspect-ratio:1/1;border-radius:10px;border:1.5px dashed #4a4d5c;background:var(--surface-2);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;margin-bottom:10px;overflow:hidden;position:relative;}
+  .drop:hover{border-color:var(--gold);}
+  .drop img{width:100%;height:100%;object-fit:cover;display:block;}
+  .drop .hint{color:var(--text-muted);font-size:12px;text-align:center;padding:0 10px;}
+  .drop .hint b{display:block;font-size:24px;color:#5c5f6f;margin-bottom:4px;font-weight:400;}
+  .drop .remove{position:absolute;top:6px;right:6px;background:#000000aa;color:#fff;border:none;width:22px;height:22px;border-radius:50%;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;}
+  input[type=file]{display:none;}
+  .field-group{margin-bottom:9px;}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .check-row{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-muted);cursor:pointer;margin-bottom:8px;}
+  .check-row input{width:auto;accent-color:var(--gold);cursor:pointer;}
+  .mini-checks{display:flex;flex-wrap:wrap;gap:8px;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:9px 10px;margin-bottom:8px;}
+  .mini-checks label{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--text-muted);cursor:pointer;}
+  .mini-checks input{width:auto;accent-color:var(--teal);cursor:pointer;}
+  .radio-row{display:flex;gap:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:9px 10px;}
+  .radio-row label{display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--text-muted);cursor:pointer;}
+  .radio-row input{width:auto;accent-color:var(--gold);cursor:pointer;}
+
+  .actions-bar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 22px;margin-bottom:26px;}
+  .actions-bar .note{color:var(--text-muted);font-size:12.5px;flex:1;min-width:200px;}
+
+  #composerOutputs{display:none;} #composerOutputs.show{display:block;}
+  #canvasWrap{width:100%;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:#0d0e13;}
+  #outputCanvas{width:100%;display:block;}
+  .dl-row{display:flex;gap:12px;margin-top:14px;flex-wrap:wrap;align-items:center;}
+  .caption-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;}
+
+  .ai-workflow{background:var(--surface-2);border:1px solid var(--gold-deep);border-radius:12px;padding:16px 18px;margin-bottom:18px;}
+  .ai-workflow-head{font-weight:700;color:var(--gold);font-size:14px;margin-bottom:14px;}
+  .ai-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;}
+  .ai-step{display:flex;gap:12px;background:#14151c;border:1px solid var(--line);border-radius:10px;padding:14px;}
+  .ai-step-num{flex-shrink:0;font-family:'Bebas Neue',sans-serif;letter-spacing:1px;font-size:15px;color:#1a1305;background:linear-gradient(180deg,var(--gold),var(--gold-deep));border-radius:7px;padding:6px 10px;height:fit-content;}
+  .ai-step-body{flex:1;min-width:0;}
+  .ai-step-desc{font-size:12.5px;color:var(--text-muted);line-height:1.6;margin-bottom:10px;}
+  .caption-box{width:100%;min-height:240px;}
+
+  /* ---- Listings / Orders / Archive tables ---- */
+  .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px;}
+  .platform-checks{display:flex;flex-wrap:wrap;gap:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:12px 14px;grid-column:1/-1;}
+  .platform-checks label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-muted);cursor:pointer;}
+  .platform-checks input{width:auto;accent-color:var(--gold);cursor:pointer;}
+  .bidtype-checks{display:flex;gap:16px;background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:12px 14px;grid-column:1/-1;}
+  .bidtype-checks label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-muted);cursor:pointer;}
+  .bidtype-checks input{width:auto;accent-color:var(--gold);cursor:pointer;}
+
+  .table-scroll{overflow-x:auto;border-radius:10px;border:1px solid var(--line);}
+  table{width:100%;border-collapse:collapse;min-width:760px;}
+  table.orders-table{min-width:1360px;} table.archive-table{min-width:1180px;} table.listings-table{min-width:1280px;}
+  thead th{background:var(--surface-3);color:var(--text-muted);font-size:11px;letter-spacing:.5px;text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  tbody td{padding:8px 10px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle;}
+  tbody tr:hover{background:#ffffff05;} tbody tr:last-child td{border-bottom:none;}
+  .empty-row td{text-align:center;color:var(--text-muted);padding:26px;font-size:13px;}
+  .badge-pill{display:inline-block;background:#4fd1c518;color:var(--teal);border:1px solid #4fd1c540;border-radius:12px;font-size:11px;padding:2px 9px;margin:2px 3px 2px 0;white-space:nowrap;}
+  .badge-gold{background:#e8b94a18;color:var(--gold);border-color:#e8b94a40;}
+  .status-select{min-width:100px;}
+  .cell-input{min-width:110px;} .cell-input-wide{min-width:150px;} .cell-amount{min-width:90px;text-align:right;}
+  .muted-small{color:var(--text-muted);font-size:11.5px;margin-top:2px;}
+  .listing-thumb{width:40px;height:40px;flex-shrink:0;border-radius:7px;overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center;background:var(--surface-2);border:1.5px dashed #4a4d5c;color:var(--text-muted);font-size:11px;line-height:1;text-align:center;}
+  .listing-thumb.has{border:1px solid var(--gold-deep);}
+  .listing-thumb:hover{border-color:var(--gold);color:var(--gold);}
+  .listing-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+  .actions-cell{display:flex;gap:6px;flex-wrap:nowrap;}
+  .orderno-cell{display:flex;gap:4px;align-items:center;}
+  .quick-range{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+  .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+  .toolbar .search-input{max-width:220px;}
+  .relist-panel{background:var(--surface-2);border:1px solid var(--gold-deep);border-radius:10px;padding:14px 16px;margin-bottom:14px;display:none;}
+  .relist-panel.show{display:block;}
+
+  #reportOutput{margin-top:18px;} #reportOutput.hidden{display:none;}
+  .report-summary{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px;}
+  .report-breakdown{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:16px;}
+  .breakdown-box{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:14px 16px;}
+  .breakdown-box h3{margin:0 0 8px;font-size:13px;color:var(--text-muted);letter-spacing:.5px;font-weight:700;}
+  .breakdown-row{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;}
+  .breakdown-row span:last-child{font-family:'JetBrains Mono',monospace;color:var(--gold);}
+
+  @media (max-width:560px){h1{font-size:24px;} .wrap{padding:22px 12px 60px;} nav.tabs button{padding:10px 10px;font-size:12.5px;}}
+
+  /* ---- Modal ---- */
+  .modal-overlay{position:fixed;inset:0;background:rgba(6,7,10,0.7);display:none;align-items:center;justify-content:center;z-index:1000;padding:20px;}
+  .modal-overlay.show{display:flex;}
+  .modal-box{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:24px;max-width:420px;width:100%;box-shadow:0 12px 40px #0008;}
+  .modal-box .modal-msg{font-size:14.5px;line-height:1.6;color:var(--text);margin-bottom:20px;white-space:pre-wrap;}
+  .modal-box .modal-actions{display:flex;gap:10px;justify-content:flex-end;}
+</style>
+</head>
+<body>
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-box">
+    <div class="modal-msg" id="modalMsg"></div>
+    <div class="modal-actions" id="modalActions"></div>
+  </div>
+</div>
+<div class="wrap">
+
+  <header>
+    <div class="brandmark">
+      <div class="disc"></div>
+      <div>
+        <h1>CD 出貨管理系統</h1>
+        <div class="sub">出貨看板・上架清單・進行中訂單・封存與報表</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="note-banner" id="storageNote"><b>資料儲存說明：</b><span id="storageNoteText">一般文字資料存於瀏覽器 localStorage、商品圖片存於容量更大的 IndexedDB（皆在此瀏覽器本機，下載後開啟也適用）。若清除瀏覽器資料或換裝置／換瀏覽器，資料不會跟著走，請定期用下方「備份資料」下載 JSON 檔（已包含圖片，檔案可能較大）；需要時再用「還原備份」載回。</span>
+    <div id="nativePathRow" style="display:none;margin-top:10px;font-size:12.5px;line-height:1.6;">
+      <span style="color:var(--text-muted);">本機資料夾（商品圖片與資料就存在這）：</span>
+      <code id="dataDirPath" style="color:var(--gold);word-break:break-all;font-family:'JetBrains Mono',monospace;"></code>
+    </div>
+    <div id="nativeWarnRow" style="display:none;margin-top:8px;color:var(--danger);font-size:12.5px;line-height:1.6;"></div>
+    <div id="syncRow" style="display:none;margin-top:8px;font-size:12.5px;line-height:1.7;"></div>
+    <div id="promoRow" style="display:none;margin-top:12px;">
+      <label class="field" style="display:block;font-size:12px;color:var(--gold);margin-bottom:4px;">商品頁優惠公告（顯示在公開商品頁最上方，只有你能編輯；改完按「發布商品頁」才會更新）</label>
+      <textarea id="shopPromoInput" placeholder="例如：本週優惠 買三片折 NT$50！面交可再議～" style="width:100%;min-height:52px;background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;resize:vertical;"></textarea>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <button class="secondary" id="backupBtn">備份資料</button>
+      <button class="ghost" id="restoreBtn">還原備份（覆蓋）</button>
+      <button class="ghost" id="mergeBtn" title="把另一台裝置的備份合併進來，不刪除現有資料">合併匯入</button>
+      <button class="secondary" id="publishShopBtn" style="display:none;" title="把在售直購商品發布成公開商品頁（GitHub Pages）">發布商品頁</button>
+      <button class="secondary" id="exportSyncBtn" style="display:none;" title="下載固定檔名的同步檔（CD管理系統同步.json），存回 iCloud 同一位置選「取代」">匯出同步檔</button>
+      <button class="ghost" id="revealBtn" style="display:none;">開啟資料夾</button>
+      <input type="file" id="restoreFile" accept="application/json,.json" style="display:none;">
+      <span class="copy-hint" id="backupHint" style="color:var(--gold);"></span>
+    </div>
+  </div>
+
+  <div id="todoBanner" style="display:none;background:#4fd1c512;border:1px solid #4fd1c545;border-radius:9px;padding:12px 14px;margin-bottom:18px;font-size:13px;line-height:1.8;"></div>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="composer">出貨看板</button>
+    <button class="tab-btn" data-tab="listings">上架清單 <span class="badge" id="tabBadgeListings">0</span></button>
+    <button class="tab-btn" data-tab="orders">進行中訂單 <span class="badge" id="tabBadgeOrders">0</span></button>
+    <button class="tab-btn" data-tab="archive">封存與報表 <span class="badge" id="tabBadgeArchive">0</span></button>
+  </nav>
+
+  <!-- ===================== COMPOSER TAB ===================== -->
+  <section class="tab-panel active" id="tab-composer">
+    <div class="composer-grid" id="cardGrid"></div>
+
+    <div class="actions-bar">
+      <button class="primary" id="generateBtn">產生合成圖片與文案</button>
+      <div class="note">至少填寫一組（照片＋藝人／專輯名稱＋標價）即可產生；文案會自動上網搜尋每張專輯並生成簡介，需要幾秒鐘時間。</div>
+    </div>
+
+    <div id="composerOutputs">
+      <div class="panel-card">
+        <h2>合成預覽</h2>
+        <div id="canvasWrap"><canvas id="outputCanvas"></canvas></div>
+        <div class="dl-row">
+          <button class="secondary" id="downloadBtn">下載 PNG 圖檔</button>
+          <span class="copy-hint show" style="opacity:.7;">若沒有直接下載，圖片會在新分頁打開，長按或右鍵即可儲存</span>
+        </div>
+      </div>
+
+      <div class="panel-card">
+        <h2>商品文案</h2>
+
+        <div class="ai-workflow">
+          <div class="ai-workflow-head">零成本半自動 AI 簡介　<span class="muted-small" style="font-weight:400;">用你手邊的 Claude / ChatGPT 網頁版，免 API、免付費</span></div>
+          <div class="ai-steps">
+            <div class="ai-step">
+              <div class="ai-step-num">步驟一</div>
+              <div class="ai-step-body">
+                <div class="ai-step-desc">複製批次生成咒語，貼進 Claude / ChatGPT 對話框讓它產生 JSON。</div>
+                <div class="dl-row" style="margin-top:0;">
+                  <button class="secondary" id="copyAIPromptBtn">複製 AI 批次生成咒語</button>
+                  <span class="copy-hint" id="hintAIPrompt">已複製！請貼給 Claude / ChatGPT</span>
+                </div>
+              </div>
+            </div>
+            <div class="ai-step">
+              <div class="ai-step-num">步驟二</div>
+              <div class="ai-step-body">
+                <div class="ai-step-desc">把 AI 回傳的 JSON 整段貼在下方，按按鈕自動填入「含簡介版本」。</div>
+                <textarea id="aiIntroPasteBox" class="mono-box" placeholder="請將 AI 產生的 JSON 結果直接貼於此處..." style="min-height:120px;margin-bottom:8px;"></textarea>
+                <div class="dl-row" style="margin-top:0;">
+                  <button class="primary" id="parseAIIntroBtn" style="font-size:14px;padding:9px 18px;">自動解析並生成含簡介文案</button>
+                  <span class="copy-hint" id="hintAIParse" style="color:var(--gold);"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="caption-cols">
+          <div>
+            <label class="field">含簡介版本</label>
+            <textarea id="captionWithIntro" class="caption-box mono-box" readonly></textarea>
+            <div class="dl-row">
+              <button class="secondary" id="copyWithIntroBtn">複製文字</button>
+              <span class="copy-hint" id="hintWithIntro">已複製 ✓</span>
+            </div>
+          </div>
+          <div>
+            <label class="field">無簡介版本（適合字數受限平台）</label>
+            <textarea id="captionNoIntro" class="caption-box mono-box" readonly></textarea>
+            <div class="dl-row">
+              <button class="secondary" id="copyNoIntroBtn">複製文字</button>
+              <span class="copy-hint" id="hintNoIntro">已複製 ✓</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-card">
+        <h2>匯入用表單格式</h2>
+        <div class="muted-small" style="margin-bottom:8px;">複製以下內容，貼到「上架清單」頁籤的匯入欄位，即可將這批商品一次加入上架清單。</div>
+        <textarea id="formTextBox" class="caption-box mono-box" style="min-height:180px;" readonly></textarea>
+        <div class="dl-row">
+          <button class="secondary" id="copyFormTextBtn">複製表單格式</button>
+          <span class="copy-hint" id="hintFormText">已複製 ✓</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== LISTINGS TAB ===================== -->
+  <section class="tab-panel" id="tab-listings">
+    <div class="panel-card">
+      <h2>新增上架商品</h2>
+      <div class="form-grid">
+        <div><label class="field">藝人名稱</label><input type="text" id="lstArtist" placeholder="例如：周杰倫"></div>
+        <div><label class="field">專輯名稱</label><input type="text" id="lstAlbum" placeholder="例如：范特西"></div>
+        <div><label class="field">標價（NT$）</label><input type="number" id="lstPrice" min="0"></div>
+        <div><label class="field">成本（NT$）</label><input type="number" id="lstCost" min="0"></div>
+        <div><label class="field">貨源</label><input type="text" id="lstSource" placeholder="例如：光華商場"></div>
+        <div><label class="field">曲風</label><input type="text" id="lstGenre" placeholder="例如：Pop"></div>
+        <div><label class="field">備注</label><input type="text" id="lstNotes" placeholder="例如：附側標、near mint"></div>
+        <div class="platform-checks">
+          <label><input type="checkbox" class="platform-check" value="Facebook Marketplace"> Facebook Marketplace</label>
+          <label><input type="checkbox" class="platform-check" value="Yahoo拍賣"> Yahoo拍賣</label>
+          <label><input type="checkbox" class="platform-check" value="旋轉拍賣"> 旋轉拍賣</label>
+          <label><input type="checkbox" class="platform-check" value="Discogs"> Discogs</label>
+          <label><input type="checkbox" class="platform-check" value="Threads"> Threads</label>
+        </div>
+        <div class="bidtype-checks">
+          <label><input type="radio" name="lstBidType" value="競標"> 競標</label>
+          <label><input type="radio" name="lstBidType" value="直購"> 直購</label>
+        </div>
+        <div id="lstAuctionWrap" style="display:none;"><label class="field">截標時間（競標）</label><input type="datetime-local" id="lstAuctionEnd"></div>
+        <div><label class="field check-row" style="margin-top:6px;"><input type="checkbox" id="lstSideLabel"> 有側標</label></div>
+      </div>
+      <button class="primary" id="addListingBtn">＋ 新增上架</button>
+    </div>
+
+    <div class="panel-card">
+      <h2>批量匯入</h2>
+      <div class="muted-small" style="margin-bottom:8px;">貼上從「出貨看板」複製的表單格式文字，即可一次匯入多筆商品。</div>
+      <textarea id="importBox" class="mono-box" style="min-height:140px;" placeholder="貼上表單格式文字..."></textarea>
+      <div class="dl-row">
+        <button class="secondary" id="importBtn">匯入資料</button>
+        <span class="copy-hint" id="hintImport" style="color:var(--gold);"></span>
+      </div>
+    </div>
+
+    <div class="panel-card">
+      <div class="stat-row">
+        <div class="stat-box"><div class="label">在售商品數</div><div class="value" id="statActiveListings">0</div></div>
+        <div class="stat-box"><div class="label">在售商品總值</div><div class="value" id="statActiveValue">NT$0</div></div>
+      </div>
+      <div class="toolbar">
+        <input type="text" id="listingSearch" class="search-input" placeholder="搜尋藝人／專輯...">
+        <select id="filterStatus" class="status-select" title="依狀態篩選"><option value="">狀態：全部</option><option value="在售">在售</option><option value="保留中">保留中</option><option value="已售出">已售出</option><option value="已下架">已下架</option></select>
+        <select id="filterPlatform" class="status-select" title="依上架平台篩選"><option value="">平台：全部</option><option value="Facebook Marketplace">Facebook Marketplace</option><option value="Yahoo拍賣">Yahoo拍賣</option><option value="旋轉拍賣">旋轉拍賣</option><option value="Discogs">Discogs</option><option value="Threads">Threads</option><option value="__none__">未設定平台</option></select>
+        <select id="filterSource" class="status-select" title="依貨源篩選"><option value="">貨源：全部</option></select>
+        <select id="filterGenre" class="status-select" title="依曲風篩選"><option value="">曲風：全部</option></select>
+        <button class="ghost" id="clearFiltersBtn" style="display:none;">✕ 清除篩選</button>
+        <label class="check-row" style="margin:0;"><input type="checkbox" id="selectAllListings"> 全選</label>
+        <span class="muted-small" id="selectedCountLabel">已選取 0 筆</span>
+        <button class="primary" id="createOrderBtn" style="font-size:14px;padding:8px 18px;">成立訂單</button>
+        <button class="secondary" id="loadToComposerBtn">帶回看板重新產生圖文</button>
+        <button class="secondary" id="batchEditBtn">編輯選取項目</button>
+        <button class="secondary" id="batchRelistBtn">批量重新上架</button>
+        <button class="danger-ghost" id="batchDeleteBtn">批量刪除</button>
+      </div>
+      <div class="relist-panel" id="relistPanel">
+        <div style="font-weight:700;margin-bottom:10px;color:var(--gold);">批量重新上架</div>
+        <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));">
+          <div><label class="field">新標價（留空則保留原價）</label><input type="number" id="relistPrice" min="0"></div>
+          <div class="platform-checks" style="grid-column:1/-1;">
+            <label><input type="checkbox" class="relist-platform-check" value="Facebook Marketplace"> Facebook Marketplace</label>
+            <label><input type="checkbox" class="relist-platform-check" value="Yahoo拍賣"> Yahoo拍賣</label>
+            <label><input type="checkbox" class="relist-platform-check" value="旋轉拍賣"> 旋轉拍賣</label>
+            <label><input type="checkbox" class="relist-platform-check" value="Discogs"> Discogs</label>
+            <label><input type="checkbox" class="relist-platform-check" value="Threads"> Threads</label>
+          </div>
+          <div class="bidtype-checks" style="grid-column:1/-1;flex-wrap:wrap;">
+            <span style="font-size:12px;color:var(--text-muted);align-self:center;">修改銷售模式：</span>
+            <label><input type="radio" name="relistBidMode" value="keep" checked> 不修改（保留原模式）</label>
+            <label><input type="radio" name="relistBidMode" value="直購"> 改成直購</label>
+            <label><input type="radio" name="relistBidMode" value="競標"> 改成競標</label>
+          </div>
+          <div id="relistAuctionWrap" style="display:none;grid-column:1/-1;"><label class="field">新截標時間（改成競標時填寫）</label><input type="datetime-local" id="relistAuctionEnd"></div>
+        </div>
+        <div class="dl-row">
+          <button class="primary" id="confirmRelistBtn">套用重新上架</button>
+          <button class="ghost" id="cancelRelistBtn">取消</button>
+        </div>
+      </div>
+
+      <div class="relist-panel" id="editPanel">
+        <div style="font-weight:700;margin-bottom:10px;color:var(--gold);">編輯選取項目 <span class="muted-small" id="editCountLabel"></span></div>
+        <div class="muted-small" style="margin-bottom:10px;">文字欄位留空＝不修改該欄位。只勾選一筆時會自動帶入原值，可直接補漏（例如忘了勾的上架平台）。</div>
+        <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
+          <div><label class="field">藝人名稱</label><input type="text" id="edtArtist"></div>
+          <div><label class="field">專輯名稱</label><input type="text" id="edtAlbum"></div>
+          <div><label class="field">標價（NT$）</label><input type="number" id="edtPrice" min="0"></div>
+          <div><label class="field">成本（NT$）</label><input type="number" id="edtCost" min="0"></div>
+          <div><label class="field">貨源</label><input type="text" id="edtSource"></div>
+          <div><label class="field">曲風</label><input type="text" id="edtGenre"></div>
+          <div><label class="field">備注</label><input type="text" id="edtNotes"></div>
+          <div class="platform-checks" style="grid-column:1/-1;">
+            <label style="font-weight:700;color:var(--gold);"><input type="checkbox" id="edtPlatformsEnable"> 修改上架平台：</label>
+            <label><input type="checkbox" class="edit-platform-check" value="Facebook Marketplace"> Facebook Marketplace</label>
+            <label><input type="checkbox" class="edit-platform-check" value="Yahoo拍賣"> Yahoo拍賣</label>
+            <label><input type="checkbox" class="edit-platform-check" value="旋轉拍賣"> 旋轉拍賣</label>
+            <label><input type="checkbox" class="edit-platform-check" value="Discogs"> Discogs</label>
+            <label><input type="checkbox" class="edit-platform-check" value="Threads"> Threads</label>
+          </div>
+          <div class="bidtype-checks" style="grid-column:1/-1;flex-wrap:wrap;">
+            <span style="font-size:12px;color:var(--text-muted);align-self:center;">銷售模式：</span>
+            <label><input type="radio" name="editBidMode" value="keep" checked> 不修改</label>
+            <label><input type="radio" name="editBidMode" value="直購"> 直購</label>
+            <label><input type="radio" name="editBidMode" value="競標"> 競標</label>
+          </div>
+          <div id="editAuctionWrap" style="display:none;grid-column:1/-1;"><label class="field">截標時間（改成競標時填寫）</label><input type="datetime-local" id="edtAuctionEnd"></div>
+          <div class="bidtype-checks" style="grid-column:1/-1;flex-wrap:wrap;">
+            <span style="font-size:12px;color:var(--text-muted);align-self:center;">側標：</span>
+            <label><input type="radio" name="editSide" value="keep" checked> 不修改</label>
+            <label><input type="radio" name="editSide" value="yes"> 有側標</label>
+            <label><input type="radio" name="editSide" value="no"> 無側標</label>
+          </div>
+          <div><label class="field">狀態</label><select id="edtStatus"><option value="keep">不修改</option><option value="在售">在售</option><option value="保留中">保留中</option><option value="已售出">已售出</option><option value="已下架">已下架</option></select></div>
+        </div>
+        <div class="dl-row">
+          <button class="primary" id="confirmEditBtn">套用修改</button>
+          <button class="ghost" id="cancelEditBtn">取消</button>
+        </div>
+      </div>
+
+      <div class="relist-panel" id="orderPanel">
+        <div style="font-weight:700;margin-bottom:10px;color:var(--gold);">成立訂單</div>
+        <div class="muted-small" style="margin-bottom:10px;">將以下勾選商品合併為一筆訂單。</div>
+        <div id="orderPanelItems" style="background:#14151c;border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:13px;"></div>
+        <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
+          <div><label class="field">訂單日期</label><input type="date" id="orderDate"></div>
+          <div><label class="field">訂單來源</label><select id="orderSourceSel"></select></div>
+          <div><label class="field">買家</label><input type="text" id="orderBuyer" placeholder="買家名稱／帳號"></div>
+          <div><label class="field">運送方式</label><select id="orderShippingSel"></select></div>
+          <div><label class="field">付款狀態</label><select id="orderPaymentSel"></select></div>
+          <div><label class="field">訂單編號（選填）</label><input type="text" id="orderNoInput"></div>
+          <div><label class="field">訂單金額（可調整）</label><input type="number" id="orderAmount" min="0"></div>
+          <div><label class="field">優惠內容（選填）</label><input type="text" id="orderDiscount" placeholder="例如：買三片折50"></div>
+          <div><label class="field">備注（選填）</label><input type="text" id="orderNotesInput"></div>
+        </div>
+        <div class="dl-row">
+          <button class="primary" id="confirmOrderBtn">確認成立訂單</button>
+          <button class="ghost" id="cancelOrderBtn">取消</button>
+        </div>
+      </div>
+
+      <h2>上架清單 <span class="count" id="listingCountLabel">(0)</span></h2>
+      <div class="table-scroll">
+        <table class="listings-table" id="listingsTable">
+          <thead>
+            <tr>
+              <th></th><th>商品</th><th>標價</th><th>成本</th><th>貨源</th><th>曲風</th><th>備注</th>
+              <th>上架平台</th><th>類型</th><th>截標時間</th><th>側標</th><th>上架日期</th><th>狀態</th><th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="listingsBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== ORDERS TAB ===================== -->
+  <section class="tab-panel" id="tab-orders">
+    <div class="panel-card">
+      <div class="stat-row">
+        <div class="stat-box"><div class="label">進行中訂單數</div><div class="value" id="statOrderCount">0</div></div>
+        <div class="stat-box"><div class="label">進行中總金額</div><div class="value" id="statOrderValue">NT$0</div></div>
+        <div class="stat-box"><div class="label">待出貨</div><div class="value" id="statPendingShip">0</div></div>
+        <div class="stat-box"><div class="label">未付款</div><div class="value" id="statUnpaid">0</div></div>
+      </div>
+      <div class="row-between">
+        <h2>進行中訂單 <span class="count" id="orderCountLabel">(0)</span></h2>
+        <button class="primary" id="addOrderBtn">＋ 新增訂單</button>
+      </div>
+      <div class="table-scroll">
+        <table class="orders-table" id="ordersTable">
+          <thead>
+            <tr>
+              <th>日期</th><th>訂單來源</th><th>買家</th><th>訂單內容</th><th>金額</th><th>運送方式</th>
+              <th>訂單編號</th><th>出貨狀態</th><th>付款狀態</th><th>優惠</th><th>備注</th><th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="ordersBody"></tbody>
+        </table>
+      </div>
+      <div class="muted-small" style="margin-top:10px;">欄位會在修改後自動儲存。按「完成訂單」會將該筆資料移到封存頁籤。</div>
+    </div>
+  </section>
+
+  <!-- ===================== ARCHIVE TAB ===================== -->
+  <section class="tab-panel" id="tab-archive">
+    <div class="panel-card">
+      <h2>報表產生器</h2>
+      <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));align-items:end;">
+        <div><label class="field">起始日期</label><input type="date" id="reportStart"></div>
+        <div><label class="field">結束日期</label><input type="date" id="reportEnd"></div>
+        <div><button class="primary" id="genReportBtn" style="width:100%;">產生報表</button></div>
+      </div>
+      <div class="quick-range">
+        <button class="ghost" data-range="thisMonth">本月</button>
+        <button class="ghost" data-range="lastMonth">上個月</button>
+        <button class="ghost" data-range="all">全部區間</button>
+      </div>
+      <div id="reportOutput" class="hidden">
+        <div class="report-summary">
+          <div class="stat-box"><div class="label">區間訂單數</div><div class="value" id="reportCount">0</div></div>
+          <div class="stat-box"><div class="label">區間總金額</div><div class="value" id="reportTotal">NT$0</div></div>
+          <div class="stat-box"><div class="label">平均金額</div><div class="value" id="reportAvg">NT$0</div></div>
+          <div class="stat-box"><div class="label">區間總成本</div><div class="value" id="reportCost" style="color:var(--text-muted);">NT$0</div></div>
+          <div class="stat-box"><div class="label">區間毛利</div><div class="value" id="reportProfit" style="color:var(--teal);">NT$0</div></div>
+        </div>
+        <div class="muted-small" id="reportProfitNote" style="margin:-8px 0 14px;"></div>
+        <div class="report-breakdown">
+          <div class="breakdown-box"><h3>依平台分類</h3><div id="breakdownSource"></div></div>
+          <div class="breakdown-box"><h3>依運送方式分類</h3><div id="breakdownShipping"></div></div>
+          <div class="breakdown-box"><h3>依貨源毛利（快照）</h3><div id="breakdownOrigin"></div></div>
+        </div>
+        <div class="table-scroll">
+          <table class="archive-table" id="reportTable">
+            <thead><tr><th>完成日期</th><th>訂單來源</th><th>買家</th><th>訂單內容</th><th>金額</th><th>成本</th><th>毛利</th><th>運送方式</th><th>訂單編號</th></tr></thead>
+            <tbody id="reportBody"></tbody>
+          </table>
+        </div>
+        <div class="row-between" style="margin-top:14px;">
+          <div style="display:flex;gap:10px;align-items:center;">
+            <button class="secondary" id="copyReportBtn">複製報表文字</button>
+            <button class="secondary" id="exportCsvBtn">下載 CSV</button>
+            <span class="copy-hint" id="reportCopyHint">已複製 ✓</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-card">
+      <h2>已封存訂單 <span class="count" id="archiveCountLabel">(0)</span></h2>
+      <div class="table-scroll">
+        <table class="archive-table" id="archiveTable">
+          <thead><tr><th>完成日期</th><th>訂單日期</th><th>訂單來源</th><th>買家</th><th>訂單內容</th><th>金額</th><th>優惠</th><th>運送方式</th><th>訂單編號</th><th>備注</th><th>操作</th></tr></thead>
+          <tbody id="archiveBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+// ---------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------
+const SLOTS = 9;
+const PLATFORMS = ['Facebook Marketplace', 'Yahoo拍賣', '旋轉拍賣', 'Discogs', 'Threads'];
+const SHIPPING_METHODS = ['7-11店到店', '全家店到店', '賣貨便'];
+const SHIP_STATUSES = ['待出貨', '已出貨', '問題件'];
+const PAYMENT_STATUSES = ['未付款', '已付款'];
+const LISTING_STATUSES = ['在售', '保留中', '已售出', '已下架'];
+const BID_TYPES = ['競標', '直購'];
+
+const composerState = Array.from({length: SLOTS}, () => ({
+  imgSrc:null, artist:'', album:'', price:'', notes:'', genre:'', cost:'', source:'',
+  sideLabel:false, platforms:[], biddingType:'', auctionEnd:''
+}));
+
+let listings = [];
+let orders = [];
+let archive = [];
+let lastReportList = [];
+let lastReportRange = {start:'', end:''};
+let selectedListingIds = new Set();
+
+// ---------------------------------------------------------------
+// Generic helpers
+// ---------------------------------------------------------------
+// Persistence priority:
+//   1. Native desktop bridge (window.cdshopNative) → real files on disk. Durable.
+//   2. Browser localStorage (works on a plain downloaded HTML file).
+//   3. Anthropic artifact storage (only inside the Claude sandbox).
+const LS_PREFIX = 'cdshop:';
+const hasNative = (typeof window !== 'undefined' && window.cdshopNative && typeof window.cdshopNative.loadKey === 'function');
+const hasLocalStorage = (()=>{ try{ const k='__t'; localStorage.setItem(k,'1'); localStorage.removeItem(k); return true; }catch(e){ return false; } })();
+const hasArtifactStorage = (typeof window !== 'undefined' && window.storage && typeof window.storage.get === 'function');
+
+async function loadKey(key){
+  if(hasNative){
+    try{ const val = await window.cdshopNative.loadKey(key); return Array.isArray(val) ? val : []; }catch(e){ console.error('原生載入失敗：', key, e); }
+  }
+  if(hasLocalStorage){
+    try{ const raw = localStorage.getItem(LS_PREFIX + key); if(raw !== null) return JSON.parse(raw); }catch(e){}
+  }
+  if(hasArtifactStorage){
+    try{ const res = await window.storage.get(key, false); return res && res.value ? JSON.parse(res.value) : []; }catch(e){}
+  }
+  return [];
+}
+async function saveKey(key, data){
+  if(hasNative){
+    try{ await window.cdshopNative.saveKey(key, data); scheduleSyncWrite(); return; }catch(e){ console.error('原生儲存失敗：', key, e); }
+  }
+  const json = JSON.stringify(data);
+  let saved = false;
+  if(hasLocalStorage){
+    try{ localStorage.setItem(LS_PREFIX + key, json); saved = true; }catch(e){ console.error('localStorage 儲存失敗：', key, e); }
+  }
+  if(hasArtifactStorage){
+    try{ await window.storage.set(key, json, false); saved = true; }catch(e){}
+  }
+  if(!saved) console.error('儲存失敗：', key);
+}
+
+// ---------------------------------------------------------------
+// Image store — IndexedDB (large capacity, avoids localStorage 5MB limit)
+// Images are stored as Base64 data URLs, keyed by listing id (or temp token).
+// ---------------------------------------------------------------
+const IMG_DB_NAME = 'cdshop_images';
+const IMG_STORE = 'images';
+const hasIndexedDB = (typeof indexedDB !== 'undefined');
+let _imgDbPromise = null;
+function openImgDB(){
+  if(!hasIndexedDB) return Promise.reject(new Error('no indexedDB'));
+  if(_imgDbPromise) return _imgDbPromise;
+  _imgDbPromise = new Promise((resolve, reject)=>{
+    const req = indexedDB.open(IMG_DB_NAME, 1);
+    req.onupgradeneeded = ()=>{ const db = req.result; if(!db.objectStoreNames.contains(IMG_STORE)) db.createObjectStore(IMG_STORE); };
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+  return _imgDbPromise;
+}
+async function imgSet(key, dataUrl){
+  if(!key || !dataUrl) return false;
+  if(hasNative){
+    try{ const r = await window.cdshopNative.imgSet(key, dataUrl); if(r) scheduleSyncWrite(); return r; }catch(e){ console.error('原生圖片儲存失敗：', key, e); return false; }
+  }
+  try{
+    const db = await openImgDB();
+    return await new Promise((res, rej)=>{
+      const tx = db.transaction(IMG_STORE, 'readwrite');
+      tx.objectStore(IMG_STORE).put(dataUrl, key);
+      tx.oncomplete = ()=> res(true);
+      tx.onerror = ()=> rej(tx.error);
+    });
+  }catch(e){ console.error('圖片儲存失敗：', key, e); return false; }
+}
+async function imgGet(key){
+  if(!key) return null;
+  if(hasNative){
+    try{ return await window.cdshopNative.imgGet(key); }catch(e){ console.error('原生圖片載入失敗：', key, e); return null; }
+  }
+  try{
+    const db = await openImgDB();
+    return await new Promise((res)=>{
+      const tx = db.transaction(IMG_STORE, 'readonly');
+      const r = tx.objectStore(IMG_STORE).get(key);
+      r.onsuccess = ()=> res(r.result || null);
+      r.onerror = ()=> res(null);
+    });
+  }catch(e){ return null; }
+}
+async function imgDelete(key){
+  if(!key) return false;
+  if(hasNative){
+    try{ const r = await window.cdshopNative.imgDelete(key); if(r) scheduleSyncWrite(); return r; }catch(e){ console.error('原生圖片刪除失敗：', key, e); return false; }
+  }
+  try{
+    const db = await openImgDB();
+    return await new Promise((res)=>{
+      const tx = db.transaction(IMG_STORE, 'readwrite');
+      tx.objectStore(IMG_STORE).delete(key);
+      tx.oncomplete = ()=> res(true);
+      tx.onerror = ()=> res(false);
+    });
+  }catch(e){ return false; }
+}
+async function imgAllKeys(){
+  if(hasNative){
+    try{ return await window.cdshopNative.imgAllKeys(); }catch(e){ console.error('原生圖片列舉失敗：', e); return []; }
+  }
+  try{
+    const db = await openImgDB();
+    return await new Promise((res)=>{
+      const tx = db.transaction(IMG_STORE, 'readonly');
+      const r = tx.objectStore(IMG_STORE).getAllKeys();
+      r.onsuccess = ()=> res(r.result || []);
+      r.onerror = ()=> res([]);
+    });
+  }catch(e){ return []; }
+}
+// Remove image entries not referenced by any current listing (and stale temp tokens)
+async function cleanupOrphanImages(){
+  const keys = await imgAllKeys();
+  const validIds = new Set(listings.map(l => l.id));
+  let removed = 0;
+  for(const k of keys){
+    if(!validIds.has(k)){ await imgDelete(k); removed++; }
+  }
+  return removed;
+}
+
+// ---------------------------------------------------------------
+// Upload helper — turns a picked File into a browser-renderable image
+// data URL. If the browser can't decode it (e.g. iPhone HEIC), fall back to
+// the native `sips` transcoder (desktop app only) to produce a JPEG.
+// Returns null (after alerting the user) when the image can't be used.
+// ---------------------------------------------------------------
+function readFileAsDataURL(file){
+  return new Promise((resolve, reject)=>{
+    const r = new FileReader();
+    r.onload = (e)=> resolve(e.target.result);
+    r.onerror = ()=> reject(r.error);
+    r.readAsDataURL(file);
+  });
+}
+function canDecodeImage(dataUrl){
+  return new Promise((resolve)=>{
+    if(!dataUrl){ resolve(false); return; }
+    const img = new Image();
+    img.onload = ()=> resolve(img.naturalWidth > 0 && img.naturalHeight > 0);
+    img.onerror = ()=> resolve(false);
+    img.src = dataUrl;
+  });
+}
+// Downscale oversized photos to keep storage / sync-file / backups lean.
+// Listing photos never need 3MB originals: the composite cell is 620px.
+const IMG_MAX_DIM = 1600;
+function downscaleImage(dataUrl, maxDim){
+  return new Promise((resolve)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const w = img.naturalWidth, h = img.naturalHeight;
+      if(!w || !h || (w <= maxDim && h <= maxDim)){ resolve(dataUrl); return; }
+      const scale = maxDim / Math.max(w, h);
+      const c = document.createElement('canvas');
+      c.width = Math.round(w * scale); c.height = Math.round(h * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      try{ resolve(c.toDataURL('image/jpeg', 0.85)); }
+      catch(e){ resolve(dataUrl); }
+    };
+    img.onerror = ()=> resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+async function fileToImageDataURL(file){
+  if(!file) return null;
+  let dataUrl;
+  try{ dataUrl = await readFileAsDataURL(file); }
+  catch(e){ await uiAlert('讀取這個檔案失敗，請再試一次。'); return null; }
+
+  // JPEG/PNG/WebP/GIF decode straight away
+  if(await canDecodeImage(dataUrl)) return await downscaleImage(dataUrl, IMG_MAX_DIM);
+
+  // Couldn't decode (typically HEIC/HEIF from iPhone) → try native transcode
+  if(hasNative && window.cdshopNative.transcodeToJpeg){
+    try{
+      const jpg = await window.cdshopNative.transcodeToJpeg(dataUrl);
+      if(jpg && await canDecodeImage(jpg)) return await downscaleImage(jpg, IMG_MAX_DIM);
+    }catch(e){ console.error('HEIC 轉檔失敗：', e); }
+    await uiAlert('這張圖片無法轉換（可能檔案毀損）。請改用 JPG／PNG，或另存後再試。');
+    return null;
+  }
+
+  // Plain-browser fallback (no native bridge): HEIC unsupported
+  await uiAlert('此環境無法讀取這個圖片格式（例如 iPhone 的 HEIC）。\n請改用 JPG／PNG，或改用桌面版 App 開啟。');
+  return null;
+}
+
+function genId(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function todayStr(){
+  const d = new Date();
+  const tzOffset = d.getTimezoneOffset() * 60000;
+  return new Date(d - tzOffset).toISOString().slice(0,10);
+}
+function fmtMoney(n){
+  const num = parseFloat(n);
+  return 'NT$' + (isNaN(num) ? 0 : num).toLocaleString('en-US');
+}
+function formatName(artist, album){
+  const a = (artist||'').trim(); const b = (album||'').trim();
+  if(a && b) return `${a} - ${b}`;
+  return a || b || '(未命名商品)';
+}
+function optionEl(value, label, selected){
+  const o = document.createElement('option');
+  o.value = value; o.textContent = label !== undefined ? label : value;
+  if(value === selected) o.selected = true;
+  return o;
+}
+async function copyText(text, hintEl){
+  try{ await navigator.clipboard.writeText(text); }
+  catch(e){
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+  }
+  if(hintEl){ hintEl.classList.add('show'); setTimeout(()=>hintEl.classList.remove('show'), 1800); }
+}
+
+// Sandbox-safe confirm/alert (native dialogs are blocked in artifact iframes)
+function uiConfirm(message){
+  return new Promise(resolve=>{
+    const overlay = document.getElementById('modalOverlay');
+    const actions = document.getElementById('modalActions');
+    document.getElementById('modalMsg').textContent = message;
+    actions.innerHTML = '';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'ghost'; cancelBtn.textContent = '取消';
+    const okBtn = document.createElement('button');
+    okBtn.className = 'primary'; okBtn.style.fontSize = '14px'; okBtn.style.padding = '9px 20px'; okBtn.textContent = '確定';
+    const close = (val)=>{ overlay.classList.remove('show'); resolve(val); };
+    cancelBtn.addEventListener('click', ()=>close(false));
+    okBtn.addEventListener('click', ()=>close(true));
+    actions.appendChild(cancelBtn); actions.appendChild(okBtn);
+    overlay.classList.add('show');
+  });
+}
+function uiAlert(message){
+  return new Promise(resolve=>{
+    const overlay = document.getElementById('modalOverlay');
+    const actions = document.getElementById('modalActions');
+    document.getElementById('modalMsg').textContent = message;
+    actions.innerHTML = '';
+    const okBtn = document.createElement('button');
+    okBtn.className = 'primary'; okBtn.style.fontSize = '14px'; okBtn.style.padding = '9px 20px'; okBtn.textContent = '確定';
+    okBtn.addEventListener('click', ()=>{ overlay.classList.remove('show'); resolve(); });
+    actions.appendChild(okBtn);
+    overlay.classList.add('show');
+  });
+}
+
+// ---------------------------------------------------------------
+// Tab switching
+// ---------------------------------------------------------------
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+  });
+});
+function switchTab(name){ document.querySelector(`.tab-btn[data-tab="${name}"]`).click(); }
+
+/* ================================================================
+   COMPOSER TAB
+================================================================ */
+const cardGrid = document.getElementById('cardGrid');
+const generateBtn = document.getElementById('generateBtn');
+
+function buildCards(){
+  cardGrid.innerHTML = '';
+  for(let i=0;i<SLOTS;i++){
+    const card = document.createElement('div');
+    card.className = 'slot-card';
+    card.id = 'card-'+i;
+    card.innerHTML = `
+      <div class="tag-corner">${String(i+1).padStart(2,'0')}</div>
+      <div class="drop" id="drop-${i}">
+        <div class="hint"><b>＋</b>點擊上傳照片</div>
+        <input type="file" accept="image/*,.heic,.heif" id="file-${i}">
+      </div>
+      <div class="field-group"><label class="field">藝人名稱</label><input type="text" id="artist-${i}" placeholder="例如：周杰倫"></div>
+      <div class="field-group"><label class="field">專輯名稱</label><input type="text" id="album-${i}" placeholder="例如：范特西"></div>
+      <div class="two-col">
+        <div class="field-group"><label class="field">標價（NT$）</label><input type="number" id="price-${i}" min="0"></div>
+        <div class="field-group"><label class="field">成本（NT$）</label><input type="number" id="cost-${i}" min="0"></div>
+      </div>
+      <div class="two-col">
+        <div class="field-group"><label class="field">貨源</label><input type="text" id="source-${i}" placeholder="例如：光華商場"></div>
+        <div class="field-group"><label class="field">曲風</label><input type="text" id="genre-${i}" placeholder="例如：Pop"></div>
+      </div>
+      <div class="field-group"><label class="field">備注（選填）</label><textarea id="notes-${i}" style="min-height:44px;"></textarea></div>
+      <label class="check-row"><input type="checkbox" id="sidelabel-${i}"> 有側標</label>
+      <div class="mini-checks">
+        ${PLATFORMS.map(p=>`<label><input type="checkbox" class="cplat-${i}" value="${p}"> ${p}</label>`).join('')}
+      </div>
+      <div class="radio-row">
+        ${BID_TYPES.map(t=>`<label><input type="radio" name="cbid-${i}" value="${t}"> ${t}</label>`).join('')}
+      </div>
+      <div class="field-group" id="auctionwrap-${i}" style="display:none;margin-top:8px;"><label class="field">截標時間（競標）</label><input type="datetime-local" id="cauction-${i}"></div>
+    `;
+    cardGrid.appendChild(card);
+
+    const drop = document.getElementById(`drop-${i}`);
+    const fileInput = document.getElementById(`file-${i}`);
+    drop.addEventListener('click', (e)=>{ if(!e.target.classList.contains('remove')) fileInput.click(); });
+    fileInput.addEventListener('change', async (e)=>{
+      const file = e.target.files[0]; e.target.value = ''; if(!file) return;
+      const dataUrl = await fileToImageDataURL(file);
+      if(!dataUrl) return;
+      composerState[i].imgSrc = dataUrl; renderDrop(i); updateSlotProgress();
+    });
+
+    ['artist','album','price','cost','source','genre','notes'].forEach(field=>{
+      document.getElementById(`${field}-${i}`).addEventListener('input',(e)=>{
+        composerState[i][field] = e.target.value;
+        refreshCardFilledState(i);
+      });
+    });
+    document.getElementById(`sidelabel-${i}`).addEventListener('change', (e)=>{ composerState[i].sideLabel = e.target.checked; });
+    document.querySelectorAll(`.cplat-${i}`).forEach(cb=>{
+      cb.addEventListener('change', ()=>{
+        composerState[i].platforms = Array.from(document.querySelectorAll(`.cplat-${i}:checked`)).map(x=>x.value);
+      });
+    });
+    document.querySelectorAll(`input[name="cbid-${i}"]`).forEach(r=>{
+      r.addEventListener('change', ()=>{
+        composerState[i].biddingType = r.value;
+        const wrap = document.getElementById(`auctionwrap-${i}`);
+        wrap.style.display = (r.value === '競標') ? 'block' : 'none';
+        if(r.value !== '競標'){ composerState[i].auctionEnd = ''; document.getElementById(`cauction-${i}`).value = ''; }
+      });
+    });
+    document.getElementById(`cauction-${i}`).addEventListener('input', (e)=>{ composerState[i].auctionEnd = e.target.value; });
+  }
+}
+
+function refreshCardFilledState(i){
+  const s = composerState[i];
+  document.getElementById('card-'+i).classList.toggle('filled', !!(s.imgSrc && (s.artist || s.album)));
+  updateSlotProgress();
+}
+
+function renderDrop(i){
+  const drop = document.getElementById(`drop-${i}`);
+  if(composerState[i].imgSrc){
+    drop.innerHTML = `<img src="${composerState[i].imgSrc}"><button class="remove" title="移除">×</button>`;
+    refreshCardFilledState(i);
+    drop.querySelector('.remove').addEventListener('click',(e)=>{
+      e.stopPropagation();
+      composerState[i].imgSrc = null;
+      drop.innerHTML = `<div class="hint"><b>＋</b>點擊上傳照片</div><input type="file" accept="image/*,.heic,.heif" id="file-${i}">`;
+      document.getElementById(`file-${i}`).addEventListener('change', async (e2)=>{
+        const file = e2.target.files[0]; e2.target.value = ''; if(!file) return;
+        const dataUrl = await fileToImageDataURL(file);
+        if(!dataUrl) return;
+        composerState[i].imgSrc = dataUrl; renderDrop(i); updateSlotProgress();
+      });
+      refreshCardFilledState(i);
+    });
+  }
+}
+
+function updateSlotProgress(){
+  const anyUseful = composerState.some(s => s.imgSrc || s.artist || s.album || s.price);
+  generateBtn.disabled = !anyUseful;
+}
+
+// Push current composerState into the (freshly built) card DOM inputs
+function hydrateComposerUI(){
+  for(let i=0;i<SLOTS;i++){
+    const s = composerState[i];
+    ['artist','album','price','cost','source','genre','notes'].forEach(f=>{
+      const el = document.getElementById(`${f}-${i}`); if(el) el.value = s[f] || '';
+    });
+    const sl = document.getElementById(`sidelabel-${i}`); if(sl) sl.checked = !!s.sideLabel;
+    document.querySelectorAll(`.cplat-${i}`).forEach(cb=>{ cb.checked = (s.platforms||[]).includes(cb.value); });
+    document.querySelectorAll(`input[name="cbid-${i}"]`).forEach(r=>{ r.checked = (r.value === s.biddingType); });
+    const wrap = document.getElementById(`auctionwrap-${i}`);
+    if(wrap) wrap.style.display = (s.biddingType === '競標') ? 'block' : 'none';
+    const au = document.getElementById(`cauction-${i}`); if(au) au.value = s.auctionEnd || '';
+    renderDrop(i);
+    refreshCardFilledState(i);
+  }
+  updateSlotProgress();
+}
+
+buildCards();
+updateSlotProgress();
+
+// ---- Canvas composite ----
+const CELL = 620, GRID = 3, PAD = 14, OUTER = 28, BOTTOM_BAR = 220;
+
+async function loadFonts(){
+  await Promise.all([
+    document.fonts.load('700 40px "Noto Sans TC"'),
+    document.fonts.load('900 40px "Noto Sans TC"'),
+    document.fonts.load('40px "Bebas Neue"'),
+    document.fonts.load('700 40px "JetBrains Mono"'),
+  ]);
+}
+function loadImage(src){
+  return new Promise((resolve)=>{
+    if(!src){ resolve(null); return; }
+    const img = new Image();
+    img.onload = ()=> resolve(img);
+    img.onerror = ()=> resolve(null);
+    img.src = src;
+  });
+}
+function drawCoverImage(ctx, img, x, y, w, h){
+  const ir = img.width / img.height, r = w / h;
+  let sx, sy, sw, sh;
+  if(ir > r){ sh = img.height; sw = sh * r; sx = (img.width - sw) / 2; sy = 0; }
+  else { sw = img.width; sh = sw / r; sx = 0; sy = (img.height - sh) / 2; }
+  ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+}
+function wrapText(ctx, text, maxWidth){
+  if(!text) return [];
+  const chars = text.split(''); const lines = []; let line = '';
+  for(const ch of chars){
+    const test = line + ch;
+    if(ctx.measureText(test).width > maxWidth && line !== ''){ lines.push(line); line = ch; }
+    else line = test;
+  }
+  if(line) lines.push(line);
+  return lines;
+}
+// Fit text without ever dropping characters: shrink the font until the line
+// fits (down to minScale of the original size); if even that isn't enough,
+// wrap to additional lines at the shrunken size. No '…' truncation.
+function fitTextLines(ctx, text, baseFont, maxWidth, minScale){
+  if(!text) return { font: baseFont, size: 0, lines: [] };
+  const sizeMatch = baseFont.match(/(\d+(?:\.\d+)?)px/);
+  const baseSize = parseFloat(sizeMatch[1]);
+  ctx.font = baseFont;
+  const w = ctx.measureText(text).width;
+  if(w <= maxWidth) return { font: baseFont, size: baseSize, lines: [text] };
+  const scale = Math.max(maxWidth / w, minScale || 0.5);
+  const size = Math.round(baseSize * scale * 10) / 10;
+  const font = baseFont.replace(/(\d+(?:\.\d+)?)px/, size + 'px');
+  ctx.font = font;
+  if(ctx.measureText(text).width <= maxWidth) return { font, size, lines: [text] };
+  return { font, size, lines: wrapText(ctx, text, maxWidth) };
+}
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath(); ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y, x+w, y+h, r); ctx.arcTo(x+w, y+h, x, y+h, r);
+  ctx.arcTo(x, y+h, x, y, r); ctx.arcTo(x, y, x+w, y, r);
+  ctx.closePath();
+}
+
+async function generateComposite(){
+  await loadFonts();
+  const size = OUTER*2 + GRID*CELL + (GRID-1)*PAD;
+  const canvas = document.getElementById('outputCanvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  const bgGrad = ctx.createLinearGradient(0,0,size,size);
+  bgGrad.addColorStop(0, '#15161d'); bgGrad.addColorStop(1, '#0e0f14');
+  ctx.fillStyle = bgGrad; ctx.fillRect(0,0,size,size);
+
+  const images = await Promise.all(composerState.map(s => loadImage(s.imgSrc)));
+
+  for(let i=0;i<SLOTS;i++){
+    const row = Math.floor(i/GRID), col = i%GRID;
+    const x = OUTER + col*(CELL+PAD), y = OUTER + row*(CELL+PAD);
+    const s = composerState[i];
+
+    ctx.save();
+    roundRect(ctx, x, y, CELL, CELL, 16);
+    ctx.clip();
+    ctx.fillStyle = '#1b1d26'; ctx.fillRect(x,y,CELL,CELL);
+
+    if(images[i]){
+      drawCoverImage(ctx, images[i], x, y, CELL, CELL);
+    } else {
+      ctx.fillStyle = '#22242f'; ctx.fillRect(x,y,CELL,CELL);
+      ctx.fillStyle = '#4a4d5c'; ctx.font = '600 20px "Noto Sans TC"'; ctx.textAlign = 'center';
+      ctx.fillText('尚無照片', x+CELL/2, y+CELL/2);
+    }
+
+    // Build stacked text lines. Long text shrinks to fit (never '…' truncation);
+    // if even the minimum size can't fit one line, it wraps to more lines.
+    const maxTextW = CELL - 40;
+    const textLines = [];
+    const pushFitted = (text, baseFont, color, advFactor)=>{
+      const fit = fitTextLines(ctx, text, baseFont, maxTextW, 0.55);
+      fit.lines.forEach(line=> textLines.push({ text: line, font: fit.font, color, adv: Math.round(fit.size * advFactor) }));
+    };
+    if(s.artist) pushFitted(s.artist, '700 34px "Noto Sans TC"', '#f4f2ea', 44/34);
+    if(s.price)  pushFitted(`NT$ ${s.price}`, '700 36px "JetBrains Mono"', '#e8b94a', 46/36);
+    if(s.album)  pushFitted(s.album, '500 26px "Noto Sans TC"', '#9698a6', 36/26);
+    if(s.notes)  pushFitted(s.notes, '500 29px "Noto Sans TC"', '#9698a6', 39/29);
+
+    let barY = y + CELL;
+    if(textLines.length > 0){
+      const padX = x + 20;
+      const bottomMargin = 24;
+      const topPad = 34; // fade room above the first line
+      const totalH = textLines.reduce((sum, ln) => sum + ln.adv, 0);
+      const blockTop = y + CELL - bottomMargin - totalH;
+      barY = blockTop - topPad;
+
+      const grad = ctx.createLinearGradient(0, barY, 0, y+CELL);
+      grad.addColorStop(0, 'rgba(10,11,15,0)');
+      grad.addColorStop(0.35, 'rgba(10,11,15,0.92)');
+      grad.addColorStop(1, 'rgba(10,11,15,0.96)');
+      ctx.fillStyle = grad; ctx.fillRect(x, barY, CELL, y + CELL - barY);
+
+      ctx.textAlign = 'left';
+      let cursorY = blockTop;
+      textLines.forEach(ln=>{
+        cursorY += ln.adv;
+        ctx.font = ln.font; ctx.fillStyle = ln.color;
+        ctx.fillText(ln.text, padX, cursorY - 8);
+      });
+    }
+
+    // Side-label chip sits above the text block, clear of all text
+    if(s.sideLabel){
+      const chipW = 128, chipH = 34;
+      const chipX = x + CELL - chipW - 14;
+      const chipY = barY - chipH - 12;
+      ctx.fillStyle = 'rgba(18,19,25,0.85)';
+      roundRect(ctx, chipX, chipY, chipW, chipH, 8);
+      ctx.fill();
+      ctx.strokeStyle = '#e8b94a55'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = '#e8b94a'; ctx.font = '700 19px "Noto Sans TC"'; ctx.textAlign = 'center';
+      ctx.fillText('☑️側標', chipX+chipW/2, chipY+chipH/2+6);
+    }
+
+    ctx.restore();
+  }
+
+  document.getElementById('composerOutputs').classList.add('show');
+  document.getElementById('composerOutputs').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+// ---- Captions (with / without AI intro) ----
+const CAPTION_HEADER = `【CD 出清販售】`;
+const CAPTION_FOOTER = `交易方式7-11/全家+60或板橋面交自取，可賣貨便，有興趣或想詳細看片況請留言或私訊詢問！`;
+
+// items with their original composerState slot index
+function composerItemsWithIndex(){
+  return composerState.map((s, idx)=>({ s, idx }))
+    .filter(o => o.s.artist || o.s.album || o.s.price || o.s.imgSrc);
+}
+
+// Build a full caption. introBySlot maps composerState slot index → intro text.
+function buildCaptionFromIntros(introBySlot){
+  const items = composerItemsWithIndex();
+  if(items.length === 0) return '（尚未填寫任何商品資訊）';
+  const blocks = items.map((o, i)=>{
+    const s = o.s;
+    const namePart = formatName(s.artist, s.album);
+    const pricePart = s.price ? `NT$ ${s.price}` : '價格未定';
+    const genrePart = s.genre ? `｜曲風：${s.genre}` : '';
+    let block = `${i+1}. ${namePart}｜${pricePart}${genrePart}`;
+    const intro = introBySlot ? introBySlot[o.idx] : '';
+    if(intro) block += `\n　${intro}`;
+    if(s.notes) block += `\n　備注：${s.notes}`;
+    return block;
+  });
+  return `${CAPTION_HEADER}\n\n${blocks.join('\n\n')}\n\n${CAPTION_FOOTER}`;
+}
+
+async function fetchAlbumIntro(artist, album){
+  const prompt = `請上網搜尋歌手/樂團「${artist || '未知'}」的專輯「${album || '未知'}」，用不超過100字的繁體中文寫一段吸引買家的簡短介紹（可提及發行年份、風格、代表歌曲或評價亮點）。只回傳介紹文字本身，不要有任何前言、標題或條列符號。若找不到相關資訊，就根據名稱合理描述其音樂類型，不要編造具體事實。`;
+  try{
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6", max_tokens: 1000,
+        messages: [{ role: "user", content: prompt }],
+        tools: [{ type: "web_search_20250305", name: "web_search" }]
+      })
+    });
+    const data = await response.json();
+    return (data.content || []).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
+  }catch(err){ console.error('取得簡介失敗：', artist, album, err); return ''; }
+}
+
+async function generateCaptions(onProgress){
+  const items = composerItemsWithIndex();
+  if(items.length === 0) return {withIntro:'（尚未填寫任何商品資訊）', noIntro:'（尚未填寫任何商品資訊）'};
+
+  const introTargets = items.filter(o => o.s.artist || o.s.album);
+  let done = 0; const total = introTargets.length;
+  const introBySlot = {};
+  await Promise.all(introTargets.map(o =>
+    fetchAlbumIntro(o.s.artist, o.s.album).then(text=>{ introBySlot[o.idx] = text; done++; if(onProgress) onProgress(done,total); })
+  ));
+
+  const withIntro = buildCaptionFromIntros(introBySlot);
+  const noIntro = buildCaptionFromIntros({});
+  return {withIntro, noIntro};
+}
+
+// ---- Import-format text (for pasting into Listings) ----
+// For each slot with an image, save it to IndexedDB under a temp token and
+// embed that token in the text so the Listings import can migrate the image.
+async function buildListingFormText(){
+  const items = composerState.filter(s => s.artist || s.album || s.imgSrc);
+  if(items.length === 0) return '（尚未填寫任何商品資訊）';
+  const blocks = [];
+  for(let idx=0; idx<items.length; idx++){
+    const s = items[idx];
+    let imgToken = '';
+    if(s.imgSrc){
+      imgToken = 'imgtmp_' + genId();
+      await imgSet(imgToken, s.imgSrc);
+    }
+    const lines = [
+      `[${idx+1}]`,
+      `藝人: ${s.artist||''}`,
+      `專輯: ${s.album||''}`,
+      `標價: ${s.price||''}`,
+      `成本: ${s.cost||''}`,
+      `貨源: ${s.source||''}`,
+      `曲風: ${s.genre||''}`,
+      `備注: ${s.notes||''}`,
+      `側標: ${s.sideLabel ? '是' : '否'}`,
+      `類型: ${s.biddingType||''}`,
+      `截標時間: ${s.auctionEnd||''}`,
+      `平台: ${(s.platforms||[]).join(', ')}`,
+      `圖片鍵: ${imgToken}`
+    ];
+    blocks.push(lines.join('\n'));
+  }
+  return blocks.join('\n---\n');
+}
+
+generateBtn.addEventListener('click', async ()=>{
+  generateBtn.disabled = true;
+  const originalLabel = generateBtn.textContent;
+  generateBtn.textContent = '產生圖片中...';
+  try{
+    await generateComposite();
+
+    document.getElementById('formTextBox').value = await buildListingFormText();
+
+    document.getElementById('captionWithIntro').value = '正在為每張專輯搜尋簡介，請稍候...';
+    document.getElementById('captionNoIntro').value = '整理中...';
+    generateBtn.textContent = '搜尋專輯資料中...';
+
+    const {withIntro, noIntro} = await generateCaptions((done,total)=>{
+      generateBtn.textContent = total > 0 ? `搜尋中 (${done}/${total})...` : '整理文案中...';
+    });
+    document.getElementById('captionWithIntro').value = withIntro;
+    document.getElementById('captionNoIntro').value = noIntro;
+  }catch(err){ console.error(err); }
+  finally{ generateBtn.disabled = false; generateBtn.textContent = originalLabel; }
+});
+
+document.getElementById('downloadBtn').addEventListener('click', ()=>{
+  const canvas = document.getElementById('outputCanvas');
+  const dataUrl = canvas.toDataURL('image/png');
+  const a = document.createElement('a');
+  a.href = dataUrl; a.download = 'cd-listing-' + Date.now() + '.png';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  window.open(dataUrl, '_blank');
+});
+document.getElementById('copyWithIntroBtn').addEventListener('click', ()=>{
+  copyText(document.getElementById('captionWithIntro').value, document.getElementById('hintWithIntro'));
+});
+document.getElementById('copyNoIntroBtn').addEventListener('click', ()=>{
+  copyText(document.getElementById('captionNoIntro').value, document.getElementById('hintNoIntro'));
+});
+document.getElementById('copyFormTextBtn').addEventListener('click', ()=>{
+  copyText(document.getElementById('formTextBox').value, document.getElementById('hintFormText'));
+});
+
+/* ---- Zero-cost semi-automatic AI intro workflow ---- */
+// Step 1: build a strict-format prompt from filled slots and copy it
+function buildAIPrompt(){
+  const targets = composerState.map((s, idx)=>({ s, idx }))
+    .filter(o => (o.s.artist || '').trim() || (o.s.album || '').trim());
+  if(targets.length === 0) return null;
+
+  const albumList = targets.map(o =>
+    `  {"slotIndex": ${o.idx}, "artist": ${JSON.stringify(o.s.artist||'')}, "album": ${JSON.stringify(o.s.album||'')}}`
+  ).join(',\n');
+
+  return `請幫以下 CD 專輯分別撰寫不超過 100 字的繁體中文簡介（包含風格、發行背景或亮點）。為方便系統程式自動解析回填，請「嚴格直接」回傳 JSON 陣列格式，切勿包含任何前言、結尾廢話，也不要用 Markdown 代碼塊（不要有 \`\`\`），直接輸出純 JSON。
+
+每個物件務必原樣保留我提供的 slotIndex、artist、album，只需新增 intro 欄位填入你撰寫的簡介。
+
+回傳格式範例：
+[
+  {"slotIndex": 0, "artist": "周杰倫", "album": "范特西", "intro": "寫作生成的簡介..."}
+]
+
+以下是需要撰寫簡介的專輯清單：
+[
+${albumList}
+]`;
+}
+
+document.getElementById('copyAIPromptBtn').addEventListener('click', async ()=>{
+  const prompt = buildAIPrompt();
+  if(!prompt){ await uiAlert('請先在插槽填寫至少一筆「藝人」或「專輯」名稱。'); return; }
+  await copyText(prompt, null);
+  document.getElementById('composerOutputs').classList.add('show');
+  const hint = document.getElementById('hintAIPrompt');
+  hint.classList.add('show');
+  setTimeout(()=> hint.classList.remove('show'), 2600);
+});
+
+// Step 2: parse pasted JSON (tolerant), map intros back by slotIndex, fill caption
+function parseAIIntroJSON(raw){
+  let text = (raw || '').trim();
+  if(!text) throw new Error('empty');
+  // Strip Markdown code fences if present (```json ... ``` or ``` ... ```)
+  text = text.replace(/^```[a-zA-Z]*\s*/,'').replace(/\s*```$/,'').trim();
+  let arr;
+  try{
+    arr = JSON.parse(text);
+  }catch(e){
+    // Fallback: extract the outermost [ ... ] array substring
+    const start = text.indexOf('[');
+    const end = text.lastIndexOf(']');
+    if(start !== -1 && end !== -1 && end > start){
+      arr = JSON.parse(text.slice(start, end + 1));
+    }else{
+      throw e;
+    }
+  }
+  if(!Array.isArray(arr)) throw new Error('not an array');
+  return arr;
+}
+
+document.getElementById('parseAIIntroBtn').addEventListener('click', async ()=>{
+  const hint = document.getElementById('hintAIParse');
+  const raw = document.getElementById('aiIntroPasteBox').value;
+  let arr;
+  try{
+    arr = parseAIIntroJSON(raw);
+  }catch(e){
+    hint.style.color = 'var(--danger)';
+    hint.textContent = '解析失敗，請確認貼上的是完整 JSON 陣列';
+    hint.classList.add('show');
+    setTimeout(()=> hint.classList.remove('show'), 3500);
+    return;
+  }
+
+  // Map intros back to slots — prefer slotIndex, fall back to artist+album match
+  const introBySlot = {};
+  let matched = 0;
+  arr.forEach(item=>{
+    if(!item || typeof item !== 'object') return;
+    const intro = (item.intro || '').toString().trim();
+    if(!intro) return;
+    let slot = Number(item.slotIndex);
+    if(!Number.isInteger(slot) || slot < 0 || slot >= SLOTS || !(composerState[slot].artist || composerState[slot].album)){
+      // fallback: match by artist + album
+      const a = (item.artist||'').toString().trim();
+      const b = (item.album||'').toString().trim();
+      slot = composerState.findIndex(s => (s.artist||'').trim() === a && (s.album||'').trim() === b && (a || b));
+    }
+    if(slot >= 0 && slot < SLOTS){ introBySlot[slot] = intro; matched++; }
+  });
+
+  if(matched === 0){
+    hint.style.color = 'var(--danger)';
+    hint.textContent = '未對應到任何商品，請確認 slotIndex 或藝人／專輯是否一致';
+    hint.classList.add('show');
+    setTimeout(()=> hint.classList.remove('show'), 4000);
+    return;
+  }
+
+  document.getElementById('captionWithIntro').value = buildCaptionFromIntros(introBySlot);
+  // Ensure the no-intro version is also available
+  if(!document.getElementById('captionNoIntro').value.trim()){
+    document.getElementById('captionNoIntro').value = buildCaptionFromIntros({});
+  }
+  document.getElementById('composerOutputs').classList.add('show');
+
+  hint.style.color = 'var(--gold)';
+  hint.textContent = `已填入 ${matched} 筆簡介 ✓`;
+  hint.classList.add('show');
+  setTimeout(()=> hint.classList.remove('show'), 3000);
+});
+
+/* ================================================================
+   LISTINGS TAB
+================================================================ */
+// Show/hide auction end-time input based on 競標/直購 selection
+document.querySelectorAll('input[name="lstBidType"]').forEach(r=>{
+  r.addEventListener('change', ()=>{
+    document.getElementById('lstAuctionWrap').style.display = (r.value === '競標' && r.checked) ? 'block' : 'none';
+  });
+});
+
+function fmtDateTime(dt){
+  if(!dt) return '';
+  const d = new Date(dt);
+  if(isNaN(d)) return dt;
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function auctionEnded(item){
+  if(item.biddingType !== '競標' || !item.auctionEnd) return false;
+  return new Date(item.auctionEnd) <= new Date();
+}
+
+document.getElementById('addListingBtn').addEventListener('click', async ()=>{
+  const artist = document.getElementById('lstArtist').value.trim();
+  const album = document.getElementById('lstAlbum').value.trim();
+  const price = document.getElementById('lstPrice').value;
+  const cost = document.getElementById('lstCost').value;
+  const source = document.getElementById('lstSource').value.trim();
+  const genre = document.getElementById('lstGenre').value.trim();
+  const notes = document.getElementById('lstNotes').value.trim();
+  const platforms = Array.from(document.querySelectorAll('.platform-check:checked')).map(cb=>cb.value);
+  const bidTypeEl = document.querySelector('input[name="lstBidType"]:checked');
+  const sideLabel = document.getElementById('lstSideLabel').checked;
+  const biddingType = bidTypeEl ? bidTypeEl.value : '';
+  const auctionEnd = biddingType === '競標' ? document.getElementById('lstAuctionEnd').value : '';
+
+  if(!artist && !album){ await uiAlert('請至少輸入藝人或專輯名稱'); return; }
+
+  listings.push({
+    id: genId(), artist, album, price, cost, source, genre, notes, platforms,
+    biddingType, auctionEnd, sideLabel,
+    status: '在售', dateAdded: todayStr()
+  });
+  await saveKey('listings', listings);
+
+  ['lstArtist','lstAlbum','lstPrice','lstCost','lstSource','lstGenre','lstNotes','lstAuctionEnd'].forEach(id=> document.getElementById(id).value = '');
+  document.querySelectorAll('.platform-check').forEach(cb=>cb.checked=false);
+  document.querySelectorAll('input[name="lstBidType"]').forEach(r=>r.checked=false);
+  document.getElementById('lstSideLabel').checked = false;
+  document.getElementById('lstAuctionWrap').style.display = 'none';
+
+  renderListings();
+});
+
+// ---- Import ----
+function parseListingFormText(text){
+  const blocks = text.split(/\n?---\n?/).map(b=>b.trim()).filter(Boolean);
+  const results = [];
+  blocks.forEach(block=>{
+    const lines = block.split('\n').map(l=>l.trim()).filter(Boolean);
+    const obj = {};
+    lines.forEach(line=>{
+      if(line.startsWith('[') && line.endsWith(']')) return;
+      const idx = line.indexOf(':');
+      if(idx === -1) return;
+      obj[line.slice(0,idx).trim()] = line.slice(idx+1).trim();
+    });
+    if(!obj['藝人'] && !obj['專輯']) return;
+    const id = genId();
+    results.push({
+      id, artist: obj['藝人']||'', album: obj['專輯']||'', price: obj['標價']||'',
+      cost: obj['成本']||'', source: obj['貨源']||'', genre: obj['曲風']||'', notes: obj['備注']||'',
+      sideLabel: obj['側標']==='是',
+      biddingType: BID_TYPES.includes(obj['類型']) ? obj['類型'] : '',
+      auctionEnd: obj['截標時間']||'',
+      platforms: obj['平台'] ? obj['平台'].split(',').map(p=>p.trim()).filter(Boolean) : [],
+      status:'在售', dateAdded: todayStr(),
+      hasImage: false, _imgToken: obj['圖片鍵'] || ''
+    });
+  });
+  return results;
+}
+// Move each imported item's image from its temp token to a listing-id key
+async function migrateImportedImages(items){
+  for(const item of items){
+    const token = item._imgToken;
+    delete item._imgToken;
+    if(!token) continue;
+    const dataUrl = await imgGet(token);
+    if(dataUrl){
+      await imgSet(item.id, dataUrl);
+      item.hasImage = true;
+      await imgDelete(token);
+    }
+  }
+}
+document.getElementById('importBtn').addEventListener('click', async ()=>{
+  const text = document.getElementById('importBox').value.trim();
+  const hint = document.getElementById('hintImport');
+  if(!text){ hint.textContent = '請先貼上要匯入的內容'; hint.classList.add('show'); return; }
+  const parsed = parseListingFormText(text);
+  if(parsed.length === 0){
+    hint.textContent = '未能解析到任何商品資料，請確認格式是否正確';
+    hint.classList.add('show');
+    return;
+  }
+  await migrateImportedImages(parsed);
+  listings.push(...parsed);
+  await saveKey('listings', listings);
+  document.getElementById('importBox').value = '';
+  const withImg = parsed.filter(p=>p.hasImage).length;
+  hint.textContent = `成功匯入 ${parsed.length} 筆商品資料${withImg ? `（含 ${withImg} 張圖片）` : ''}`;
+  hint.classList.add('show');
+  setTimeout(()=> hint.classList.remove('show'), 3500);
+  renderListings();
+});
+
+// ---- Render / batch actions ----
+function getFilteredListings(){
+  const q = document.getElementById('listingSearch').value.trim().toLowerCase();
+  const fStatus = document.getElementById('filterStatus').value;
+  const fPlatform = document.getElementById('filterPlatform').value;
+  const fSource = document.getElementById('filterSource').value;
+  const fGenre = document.getElementById('filterGenre').value;
+  return listings.filter(l=>{
+    if(q && !((l.artist||'').toLowerCase().includes(q) || (l.album||'').toLowerCase().includes(q))) return false;
+    if(fStatus && l.status !== fStatus) return false;
+    if(fPlatform === '__none__'){ if(l.platforms && l.platforms.length) return false; }
+    else if(fPlatform && !(l.platforms||[]).includes(fPlatform)) return false;
+    if(fSource && (l.source||'') !== fSource) return false;
+    if(fGenre && (l.genre||'') !== fGenre) return false;
+    return true;
+  });
+}
+
+// Rebuild 貨源/曲風 options from current data, keeping the active selection
+function refreshFilterOptions(){
+  [['filterSource','source','貨源'],['filterGenre','genre','曲風']].forEach(([selId, field, label])=>{
+    const sel = document.getElementById(selId);
+    const current = sel.value;
+    const values = Array.from(new Set(listings.map(l=>(l[field]||'').trim()).filter(Boolean))).sort();
+    sel.innerHTML = '';
+    sel.appendChild(optionEl('', `${label}：全部`));
+    values.forEach(v=> sel.appendChild(optionEl(v, v, current)));
+    if(values.includes(current)) sel.value = current;
+  });
+  const anyActive = ['filterStatus','filterPlatform','filterSource','filterGenre'].some(id=>document.getElementById(id).value)
+    || document.getElementById('listingSearch').value.trim() !== '';
+  document.getElementById('clearFiltersBtn').style.display = anyActive ? 'inline-block' : 'none';
+}
+
+document.getElementById('listingSearch').addEventListener('input', renderListings);
+['filterStatus','filterPlatform','filterSource','filterGenre'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', renderListings);
+});
+document.getElementById('clearFiltersBtn').addEventListener('click', ()=>{
+  document.getElementById('listingSearch').value = '';
+  ['filterStatus','filterPlatform','filterSource','filterGenre'].forEach(id=>{ document.getElementById(id).value = ''; });
+  renderListings();
+});
+
+// Add or replace the image on a single listing (accepts HEIC via native transcode)
+let _listingImgInput = null;
+function pickImageForListing(item){
+  if(!_listingImgInput){
+    _listingImgInput = document.createElement('input');
+    _listingImgInput.type = 'file';
+    _listingImgInput.accept = 'image/*,.heic,.heif';
+    _listingImgInput.style.display = 'none';
+    document.body.appendChild(_listingImgInput);
+  }
+  _listingImgInput.value = '';
+  _listingImgInput.onchange = async ()=>{
+    const file = _listingImgInput.files[0];
+    if(!file) return;
+    const dataUrl = await fileToImageDataURL(file);
+    if(!dataUrl) return;
+    const okSave = await imgSet(item.id, dataUrl);
+    if(!okSave){ await uiAlert('圖片儲存失敗，請再試一次。'); return; }
+    item.hasImage = true;
+    await saveKey('listings', listings);
+    renderListings();
+  };
+  _listingImgInput.click();
+}
+async function removeImageForListing(item){
+  if(!(await uiConfirm('確定要移除這筆商品的圖片嗎？（商品資料會保留）'))) return;
+  await imgDelete(item.id);
+  item.hasImage = false;
+  await saveKey('listings', listings);
+  renderListings();
+}
+
+function renderListings(){
+  const tbody = document.getElementById('listingsBody');
+  tbody.innerHTML = '';
+  refreshFilterOptions();
+  const visible = getFilteredListings();
+
+  if(visible.length === 0){
+    const tr = document.createElement('tr'); tr.className = 'empty-row';
+    tr.innerHTML = '<td colspan="14">沒有符合條件的上架商品</td>';
+    tbody.appendChild(tr);
+  }
+
+  const ended = item => auctionEnded(item);
+
+  visible.forEach(item=>{
+    const tr = document.createElement('tr');
+
+    const tdSel = document.createElement('td');
+    const selCb = document.createElement('input');
+    selCb.type = 'checkbox';
+    selCb.checked = selectedListingIds.has(item.id);
+    selCb.addEventListener('change', ()=>{
+      if(selCb.checked) selectedListingIds.add(item.id); else selectedListingIds.delete(item.id);
+      updateSelectionUI();
+    });
+    tdSel.appendChild(selCb); tr.appendChild(tdSel);
+
+    const tdName = document.createElement('td');
+    const nameWrap = document.createElement('div');
+    nameWrap.style.cssText = 'display:flex;align-items:center;gap:9px;';
+    const thumb = document.createElement('div');
+    thumb.className = 'listing-thumb' + (item.hasImage ? ' has' : '');
+    thumb.title = item.hasImage ? '點擊更換圖片' : '點擊加入圖片';
+    if(item.hasImage){
+      const im = document.createElement('img');
+      imgGet(item.id).then(src=>{ if(src) im.src = src; });
+      thumb.appendChild(im);
+    } else {
+      thumb.textContent = '＋圖';
+    }
+    thumb.addEventListener('click', ()=> pickImageForListing(item));
+    const nameText = document.createElement('span');
+    nameText.textContent = formatName(item.artist, item.album);
+    nameWrap.appendChild(thumb); nameWrap.appendChild(nameText);
+    tdName.appendChild(nameWrap);
+    tr.appendChild(tdName);
+
+    // Price cell — editable inline once an auction has ended
+    const tdPrice = document.createElement('td');
+    if(ended(item)){
+      const priceInput = document.createElement('input');
+      priceInput.type = 'number'; priceInput.min = '0'; priceInput.className = 'cell-amount';
+      priceInput.value = item.price || '';
+      priceInput.title = '競標已截止，可填入得標價';
+      priceInput.style.borderColor = 'var(--gold-deep)';
+      priceInput.addEventListener('change', async ()=>{
+        item.price = priceInput.value;
+        await saveKey('listings', listings);
+        updateListingStats();
+      });
+      tdPrice.appendChild(priceInput);
+    } else {
+      tdPrice.textContent = item.price ? fmtMoney(item.price) : '—';
+    }
+    tr.appendChild(tdPrice);
+
+    const tdCost = document.createElement('td'); tdCost.textContent = item.cost ? fmtMoney(item.cost) : '—'; tr.appendChild(tdCost);
+    const tdSource = document.createElement('td'); tdSource.textContent = item.source || '—'; tr.appendChild(tdSource);
+    const tdGenre = document.createElement('td'); tdGenre.textContent = item.genre || '—'; tr.appendChild(tdGenre);
+    const tdNotes = document.createElement('td'); tdNotes.textContent = item.notes || '—'; tr.appendChild(tdNotes);
+
+    const tdPlatforms = document.createElement('td');
+    if(item.platforms && item.platforms.length){
+      item.platforms.forEach(p=>{ const pill = document.createElement('span'); pill.className = 'badge-pill'; pill.textContent = p; tdPlatforms.appendChild(pill); });
+    } else tdPlatforms.textContent = '—';
+    tr.appendChild(tdPlatforms);
+
+    const tdBid = document.createElement('td');
+    if(item.biddingType){ const pill = document.createElement('span'); pill.className = 'badge-pill badge-gold'; pill.textContent = item.biddingType; tdBid.appendChild(pill); }
+    else tdBid.textContent = '—';
+    tr.appendChild(tdBid);
+
+    // Auction end-time cell
+    const tdAuction = document.createElement('td');
+    if(item.biddingType === '競標' && item.auctionEnd){
+      const label = document.createElement('div');
+      label.textContent = fmtDateTime(item.auctionEnd);
+      label.style.fontSize = '11.5px';
+      tdAuction.appendChild(label);
+      const state = document.createElement('div');
+      state.className = 'muted-small';
+      if(ended(item)){ state.textContent = '● 已截標'; state.style.color = 'var(--gold)'; }
+      else { state.textContent = '○ 競標中'; }
+      tdAuction.appendChild(state);
+    } else {
+      tdAuction.textContent = '—';
+    }
+    tr.appendChild(tdAuction);
+
+    const tdSideLabel = document.createElement('td'); tdSideLabel.textContent = item.sideLabel ? '☑️側標' : '—'; tr.appendChild(tdSideLabel);
+    const tdDate = document.createElement('td'); tdDate.textContent = item.dateAdded || '—'; tr.appendChild(tdDate);
+
+    const tdStatus = document.createElement('td');
+    const statusSel = document.createElement('select'); statusSel.className = 'status-select';
+    LISTING_STATUSES.forEach(s => statusSel.appendChild(optionEl(s, s, item.status)));
+    statusSel.addEventListener('change', async ()=>{ item.status = statusSel.value; await saveKey('listings', listings); updateListingStats(); });
+    tdStatus.appendChild(statusSel); tr.appendChild(tdStatus);
+
+    const tdActions = document.createElement('td');
+    const actionsWrap = document.createElement('div'); actionsWrap.className = 'actions-cell';
+
+    const imgBtn = document.createElement('button'); imgBtn.className = 'small-icon';
+    imgBtn.textContent = item.hasImage ? '換圖' : '＋加圖';
+    imgBtn.title = item.hasImage ? '更換這筆商品的圖片' : '為這筆商品加入圖片';
+    imgBtn.addEventListener('click', ()=> pickImageForListing(item));
+    actionsWrap.appendChild(imgBtn);
+
+    if(item.hasImage){
+      const rmImgBtn = document.createElement('button'); rmImgBtn.className = 'small-icon';
+      rmImgBtn.textContent = '移除圖'; rmImgBtn.title = '移除這筆商品的圖片（保留商品）';
+      rmImgBtn.addEventListener('click', ()=> removeImageForListing(item));
+      actionsWrap.appendChild(rmImgBtn);
+    }
+
+    const delBtn = document.createElement('button'); delBtn.className = 'danger-ghost'; delBtn.textContent = '刪除';
+    delBtn.addEventListener('click', async ()=>{
+      if(!(await uiConfirm('確定要刪除這筆上架商品嗎？'))) return;
+      listings = listings.filter(l => l.id !== item.id);
+      selectedListingIds.delete(item.id);
+      await imgDelete(item.id);
+      await saveKey('listings', listings);
+      renderListings();
+    });
+
+    actionsWrap.appendChild(delBtn);
+    tdActions.appendChild(actionsWrap); tr.appendChild(tdActions);
+
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('listingCountLabel').textContent = `(${listings.length})`;
+  document.getElementById('tabBadgeListings').textContent = listings.length;
+  updateListingStats();
+  updateSelectionUI();
+}
+
+function updateListingStats(){
+  const active = listings.filter(l => l.status === '在售');
+  const totalValue = active.reduce((sum,l)=> sum + (parseFloat(l.price)||0), 0);
+  document.getElementById('statActiveListings').textContent = active.length;
+  document.getElementById('statActiveValue').textContent = fmtMoney(totalValue);
+}
+function updateSelectionUI(){
+  document.getElementById('selectedCountLabel').textContent = `已選取 ${selectedListingIds.size} 筆`;
+}
+
+document.getElementById('selectAllListings').addEventListener('change', (e)=>{
+  const visible = getFilteredListings();
+  if(e.target.checked) visible.forEach(l => selectedListingIds.add(l.id));
+  else visible.forEach(l => selectedListingIds.delete(l.id));
+  renderListings();
+});
+
+document.getElementById('batchDeleteBtn').addEventListener('click', async ()=>{
+  if(selectedListingIds.size === 0){ await uiAlert('請先勾選要刪除的商品'); return; }
+  if(!(await uiConfirm(`確定要刪除選取的 ${selectedListingIds.size} 筆商品嗎？`))) return;
+  for(const id of selectedListingIds){ await imgDelete(id); }
+  listings = listings.filter(l => !selectedListingIds.has(l.id));
+  selectedListingIds.clear();
+  await saveKey('listings', listings);
+  renderListings();
+});
+
+const relistPanel = document.getElementById('relistPanel');
+// Show auction time input when 改成競標 selected
+document.querySelectorAll('input[name="relistBidMode"]').forEach(r=>{
+  r.addEventListener('change', ()=>{
+    document.getElementById('relistAuctionWrap').style.display = (r.value === '競標' && r.checked) ? 'block' : 'none';
+  });
+});
+function resetRelistPanel(){
+  relistPanel.classList.remove('show');
+  document.getElementById('relistPrice').value = '';
+  document.querySelectorAll('.relist-platform-check').forEach(cb=>cb.checked=false);
+  const keep = document.querySelector('input[name="relistBidMode"][value="keep"]');
+  if(keep) keep.checked = true;
+  document.getElementById('relistAuctionWrap').style.display = 'none';
+  document.getElementById('relistAuctionEnd').value = '';
+}
+document.getElementById('batchRelistBtn').addEventListener('click', async ()=>{
+  if(selectedListingIds.size === 0){ await uiAlert('請先勾選要重新上架的商品'); return; }
+  relistPanel.classList.add('show');
+});
+document.getElementById('cancelRelistBtn').addEventListener('click', resetRelistPanel);
+document.getElementById('confirmRelistBtn').addEventListener('click', async ()=>{
+  const newPrice = document.getElementById('relistPrice').value;
+  const newPlatforms = Array.from(document.querySelectorAll('.relist-platform-check:checked')).map(cb=>cb.value);
+  const bidMode = (document.querySelector('input[name="relistBidMode"]:checked')||{}).value || 'keep';
+  const newAuctionEnd = document.getElementById('relistAuctionEnd').value;
+  if(newPlatforms.length === 0 && !(await uiConfirm('未勾選任何上架平台，確定要繼續嗎？（將清空這些商品的上架平台）'))) return;
+
+  listings.forEach(item=>{
+    if(!selectedListingIds.has(item.id)) return;
+    if(newPrice !== '') item.price = newPrice;
+    item.platforms = newPlatforms;
+    item.status = '在售';
+    item.dateAdded = todayStr();
+    if(bidMode === '直購'){
+      item.biddingType = '直購';
+      item.auctionEnd = '';
+    } else if(bidMode === '競標'){
+      item.biddingType = '競標';
+      if(newAuctionEnd) item.auctionEnd = newAuctionEnd;
+    }
+    // bidMode === 'keep' → leave biddingType/auctionEnd untouched
+  });
+  await saveKey('listings', listings);
+  resetRelistPanel();
+  selectedListingIds.clear();
+  renderListings();
+});
+
+// ---- Bulk edit selected listings (fix-ups like a forgotten platform) ----
+const editPanel = document.getElementById('editPanel');
+document.querySelectorAll('input[name="editBidMode"]').forEach(r=>{
+  r.addEventListener('change', ()=>{
+    document.getElementById('editAuctionWrap').style.display = (r.value === '競標' && r.checked) ? 'block' : 'none';
+  });
+});
+function resetEditPanel(){
+  editPanel.classList.remove('show');
+  ['edtArtist','edtAlbum','edtPrice','edtCost','edtSource','edtGenre','edtNotes','edtAuctionEnd'].forEach(id=>{ document.getElementById(id).value = ''; });
+  document.getElementById('edtPlatformsEnable').checked = false;
+  document.querySelectorAll('.edit-platform-check').forEach(cb=>cb.checked=false);
+  document.querySelector('input[name="editBidMode"][value="keep"]').checked = true;
+  document.getElementById('editAuctionWrap').style.display = 'none';
+  document.querySelector('input[name="editSide"][value="keep"]').checked = true;
+  document.getElementById('edtStatus').value = 'keep';
+}
+document.getElementById('batchEditBtn').addEventListener('click', async ()=>{
+  if(selectedListingIds.size === 0){ await uiAlert('請先勾選要編輯的商品'); return; }
+  resetEditPanel();
+  relistPanel.classList.remove('show');
+  orderPanel.classList.remove('show');
+  document.getElementById('editCountLabel').textContent = `（已選 ${selectedListingIds.size} 筆）`;
+  if(selectedListingIds.size === 1){
+    const it = listings.find(l => selectedListingIds.has(l.id));
+    if(it){
+      document.getElementById('edtArtist').value = it.artist || '';
+      document.getElementById('edtAlbum').value = it.album || '';
+      document.getElementById('edtPrice').value = it.price || '';
+      document.getElementById('edtCost').value = it.cost || '';
+      document.getElementById('edtSource').value = it.source || '';
+      document.getElementById('edtGenre').value = it.genre || '';
+      document.getElementById('edtNotes').value = it.notes || '';
+      document.getElementById('edtPlatformsEnable').checked = true;
+      document.querySelectorAll('.edit-platform-check').forEach(cb=>{ cb.checked = (it.platforms||[]).includes(cb.value); });
+      const bm = document.querySelector(`input[name="editBidMode"][value="${it.biddingType}"]`);
+      if(bm){
+        bm.checked = true;
+        if(it.biddingType === '競標'){
+          document.getElementById('editAuctionWrap').style.display = 'block';
+          document.getElementById('edtAuctionEnd').value = it.auctionEnd || '';
+        }
+      }
+      document.querySelector(`input[name="editSide"][value="${it.sideLabel ? 'yes' : 'no'}"]`).checked = true;
+      document.getElementById('edtStatus').value = it.status || 'keep';
+    }
+  }
+  editPanel.classList.add('show');
+  editPanel.scrollIntoView({behavior:'smooth', block:'center'});
+});
+document.getElementById('cancelEditBtn').addEventListener('click', resetEditPanel);
+document.getElementById('confirmEditBtn').addEventListener('click', async ()=>{
+  if(selectedListingIds.size === 0){ resetEditPanel(); return; }
+  const val = id => document.getElementById(id).value.trim();
+  const fields = { artist: val('edtArtist'), album: val('edtAlbum'), price: val('edtPrice'), cost: val('edtCost'), source: val('edtSource'), genre: val('edtGenre'), notes: val('edtNotes') };
+  const platEnable = document.getElementById('edtPlatformsEnable').checked;
+  const plats = Array.from(document.querySelectorAll('.edit-platform-check:checked')).map(cb=>cb.value);
+  const bidMode = (document.querySelector('input[name="editBidMode"]:checked')||{}).value || 'keep';
+  const newAuctionEnd = document.getElementById('edtAuctionEnd').value;
+  const side = (document.querySelector('input[name="editSide"]:checked')||{}).value || 'keep';
+  const status = document.getElementById('edtStatus').value;
+
+  if(platEnable && plats.length === 0 && !(await uiConfirm('「修改上架平台」已勾選但未選任何平台，將清空這些商品的上架平台。確定要繼續嗎？'))) return;
+
+  listings.forEach(item=>{
+    if(!selectedListingIds.has(item.id)) return;
+    Object.keys(fields).forEach(k=>{ if(fields[k] !== '') item[k] = fields[k]; });
+    if(platEnable) item.platforms = plats.slice();
+    if(bidMode === '直購'){ item.biddingType = '直購'; item.auctionEnd = ''; }
+    else if(bidMode === '競標'){ item.biddingType = '競標'; if(newAuctionEnd) item.auctionEnd = newAuctionEnd; }
+    if(side === 'yes') item.sideLabel = true;
+    else if(side === 'no') item.sideLabel = false;
+    if(status !== 'keep') item.status = status;
+  });
+  await saveKey('listings', listings);
+  resetEditPanel();
+  selectedListingIds.clear();
+  renderListings();
+});
+
+// ---- Load selected listings back into the composer (with images from IndexedDB) ----
+document.getElementById('loadToComposerBtn').addEventListener('click', async ()=>{
+  if(selectedListingIds.size === 0){ await uiAlert('請先勾選要帶回看板的商品'); return; }
+  let selected = listings.filter(l => selectedListingIds.has(l.id));
+  if(selected.length > SLOTS){
+    if(!(await uiConfirm(`出貨看板最多 ${SLOTS} 格，目前選了 ${selected.length} 筆，只會帶入前 ${SLOTS} 筆。要繼續嗎？`))) return;
+    selected = selected.slice(0, SLOTS);
+  }
+
+  // Reset composer state
+  for(let i=0;i<SLOTS;i++){
+    composerState[i] = { imgSrc:null, artist:'', album:'', price:'', notes:'', genre:'', cost:'', source:'', sideLabel:false, platforms:[], biddingType:'', auctionEnd:'' };
+  }
+  // Fill from selected listings + load images
+  for(let i=0;i<selected.length;i++){
+    const l = selected[i];
+    composerState[i] = {
+      imgSrc: null,
+      artist: l.artist||'', album: l.album||'', price: l.price||'', notes: l.notes||'',
+      genre: l.genre||'', cost: l.cost||'', source: l.source||'',
+      sideLabel: !!l.sideLabel, platforms: (l.platforms||[]).slice(),
+      biddingType: l.biddingType||'', auctionEnd: l.auctionEnd||''
+    };
+    const img = await imgGet(l.id);
+    if(img) composerState[i].imgSrc = img;
+  }
+
+  buildCards();
+  hydrateComposerUI();
+  switchTab('composer');
+  document.getElementById('composerOutputs').classList.remove('show');
+  window.scrollTo({top:0, behavior:'smooth'});
+});
+
+function populateSelect(sel, options, allowBlank){
+  sel.innerHTML = '';
+  if(allowBlank) sel.appendChild(optionEl('', '請選擇'));
+  options.forEach(opt => sel.appendChild(optionEl(opt, opt)));
+}
+
+document.getElementById('createOrderBtn').addEventListener('click', async ()=>{
+  if(selectedListingIds.size === 0){ await uiAlert('請先勾選要成立訂單的商品'); return; }
+  const selected = listings.filter(l => selectedListingIds.has(l.id));
+
+  // Warn if any selected auction hasn't ended yet
+  const ongoing = selected.filter(l => l.biddingType === '競標' && l.auctionEnd && !auctionEnded(l));
+  if(ongoing.length > 0 && !(await uiConfirm(`有 ${ongoing.length} 筆競標商品尚未到截標時間，仍要成立訂單嗎？`))) return;
+
+  // Build item summary + default total
+  const listEl = document.getElementById('orderPanelItems');
+  listEl.innerHTML = '';
+  let total = 0;
+  selected.forEach(l=>{
+    total += parseFloat(l.price)||0;
+    const row = document.createElement('div');
+    row.style.padding = '2px 0';
+    row.textContent = `• ${formatName(l.artist, l.album)}　${l.price ? fmtMoney(l.price) : '未定價'}`;
+    listEl.appendChild(row);
+  });
+
+  populateSelect(document.getElementById('orderSourceSel'), PLATFORMS, true);
+  populateSelect(document.getElementById('orderShippingSel'), SHIPPING_METHODS, true);
+  populateSelect(document.getElementById('orderPaymentSel'), PAYMENT_STATUSES, false);
+  document.getElementById('orderDate').value = todayStr();
+  document.getElementById('orderBuyer').value = '';
+  document.getElementById('orderNoInput').value = '';
+  document.getElementById('orderAmount').value = total || '';
+  document.getElementById('orderDiscount').value = '';
+  document.getElementById('orderNotesInput').value = '';
+
+  orderPanel.classList.add('show');
+  orderPanel.scrollIntoView({behavior:'smooth', block:'center'});
+});
+
+document.getElementById('cancelOrderBtn').addEventListener('click', ()=>{
+  orderPanel.classList.remove('show');
+});
+
+document.getElementById('confirmOrderBtn').addEventListener('click', async ()=>{
+  const selected = listings.filter(l => selectedListingIds.has(l.id));
+  if(selected.length === 0){ orderPanel.classList.remove('show'); return; }
+
+  const content = selected.map(l => formatName(l.artist, l.album)).join('、');
+  // Cost snapshot: freeze each item's price/cost/source at sale time so
+  // profit reporting survives later edits or deletion of the listing.
+  const items = selected.map(l => ({
+    id: l.id, name: formatName(l.artist, l.album),
+    price: parseFloat(l.price) || 0,
+    cost: parseFloat(l.cost) || 0,
+    source: l.source || ''
+  }));
+  const totalCost = items.reduce((s, it) => s + it.cost, 0);
+  orders.push({
+    id: genId(),
+    date: document.getElementById('orderDate').value || todayStr(),
+    source: document.getElementById('orderSourceSel').value,
+    buyer: document.getElementById('orderBuyer').value.trim(),
+    content,
+    items, totalCost,
+    amount: document.getElementById('orderAmount').value,
+    shipping: document.getElementById('orderShippingSel').value,
+    orderNo: document.getElementById('orderNoInput').value.trim(),
+    shipStatus: '待出貨',
+    paymentStatus: document.getElementById('orderPaymentSel').value || '未付款',
+    discount: document.getElementById('orderDiscount').value.trim(),
+    notes: document.getElementById('orderNotesInput').value.trim()
+  });
+  await saveKey('orders', orders);
+
+  // Mark those listings as sold
+  selected.forEach(l => { l.status = '已售出'; });
+  await saveKey('listings', listings);
+
+  selectedListingIds.clear();
+  orderPanel.classList.remove('show');
+  renderListings(); renderOrders();
+  switchTab('orders');
+});
+
+/* ================================================================
+   ORDERS TAB
+================================================================ */
+document.getElementById('addOrderBtn').addEventListener('click', async ()=>{
+  orders.push({ id: genId(), date: todayStr(), source:'', buyer:'', content:'', amount:'', shipping:'', orderNo:'', shipStatus:'待出貨', paymentStatus:'未付款', notes:'' });
+  await saveKey('orders', orders);
+  renderOrders();
+});
+
+function makeTextInput(value, onChange, wide){
+  const input = document.createElement('input'); input.type = 'text';
+  input.className = wide ? 'cell-input-wide' : 'cell-input'; input.value = value || '';
+  input.addEventListener('change', ()=> onChange(input.value));
+  return input;
+}
+function makeDateInput(value, onChange){
+  const input = document.createElement('input'); input.type = 'date'; input.value = value || '';
+  input.addEventListener('change', ()=> onChange(input.value));
+  return input;
+}
+function makeNumberInput(value, onChange){
+  const input = document.createElement('input'); input.type = 'number'; input.className = 'cell-amount';
+  input.value = value || ''; input.min = '0';
+  input.addEventListener('change', ()=> onChange(input.value));
+  return input;
+}
+function makeSelect(options, value, onChange, allowBlank){
+  const sel = document.createElement('select'); sel.className = 'status-select';
+  if(allowBlank) sel.appendChild(optionEl('', '請選擇', value));
+  options.forEach(opt => sel.appendChild(optionEl(opt, opt, value)));
+  sel.addEventListener('change', ()=> onChange(sel.value));
+  return sel;
+}
+
+function renderOrders(){
+  const tbody = document.getElementById('ordersBody'); tbody.innerHTML = '';
+  if(orders.length === 0){
+    const tr = document.createElement('tr'); tr.className = 'empty-row';
+    tr.innerHTML = '<td colspan="12">目前沒有進行中的訂單</td>'; tbody.appendChild(tr);
+  }
+  orders.forEach(order=>{
+    const tr = document.createElement('tr'); tr.dataset.id = order.id;
+    const persist = ()=> saveKey('orders', orders);
+
+    const tdDate = document.createElement('td'); tdDate.appendChild(makeDateInput(order.date, v=>{ order.date=v; persist(); })); tr.appendChild(tdDate);
+    const tdSource = document.createElement('td'); tdSource.appendChild(makeSelect(PLATFORMS, order.source, v=>{ order.source=v; persist(); }, true)); tr.appendChild(tdSource);
+    const tdBuyer = document.createElement('td'); tdBuyer.appendChild(makeTextInput(order.buyer, v=>{ order.buyer=v; persist(); })); tr.appendChild(tdBuyer);
+    const tdContent = document.createElement('td'); tdContent.appendChild(makeTextInput(order.content, v=>{ order.content=v; persist(); }, true)); tr.appendChild(tdContent);
+    const tdAmount = document.createElement('td'); tdAmount.appendChild(makeNumberInput(order.amount, v=>{ order.amount=v; persist(); updateOrderStats(); })); tr.appendChild(tdAmount);
+    const tdShipping = document.createElement('td'); tdShipping.appendChild(makeSelect(SHIPPING_METHODS, order.shipping, v=>{ order.shipping=v; persist(); }, true)); tr.appendChild(tdShipping);
+
+    const tdOrderNo = document.createElement('td');
+    const orderNoWrap = document.createElement('div'); orderNoWrap.className = 'orderno-cell';
+    const orderNoInput = makeTextInput(order.orderNo, v=>{ order.orderNo=v; persist(); });
+    const suggestBtn = document.createElement('button'); suggestBtn.className = 'small-icon'; suggestBtn.title = '自動產生建議編號'; suggestBtn.textContent = '#';
+    suggestBtn.addEventListener('click', ()=>{
+      const suggestion = (order.date || todayStr()).replace(/-/g,'') + '-' + String(orders.indexOf(order)+1).padStart(2,'0');
+      orderNoInput.value = suggestion; order.orderNo = suggestion; persist();
+    });
+    orderNoWrap.appendChild(orderNoInput); orderNoWrap.appendChild(suggestBtn);
+    tdOrderNo.appendChild(orderNoWrap); tr.appendChild(tdOrderNo);
+
+    const tdShipStatus = document.createElement('td'); tdShipStatus.appendChild(makeSelect(SHIP_STATUSES, order.shipStatus, v=>{ order.shipStatus=v; persist(); updateOrderStats(); })); tr.appendChild(tdShipStatus);
+    const tdPayment = document.createElement('td'); tdPayment.appendChild(makeSelect(PAYMENT_STATUSES, order.paymentStatus, v=>{ order.paymentStatus=v; persist(); updateOrderStats(); })); tr.appendChild(tdPayment);
+    const tdDiscount = document.createElement('td'); tdDiscount.appendChild(makeTextInput(order.discount, v=>{ order.discount=v; persist(); })); tr.appendChild(tdDiscount);
+    const tdNotes = document.createElement('td'); tdNotes.appendChild(makeTextInput(order.notes, v=>{ order.notes=v; persist(); }, true)); tr.appendChild(tdNotes);
+
+    const tdActions = document.createElement('td');
+    const actionsWrap = document.createElement('div'); actionsWrap.className = 'actions-cell';
+    const completeBtn = document.createElement('button'); completeBtn.className = 'secondary'; completeBtn.textContent = '完成訂單';
+    completeBtn.addEventListener('click', async ()=>{
+      if(!(await uiConfirm('確定要將此訂單標記為完成並移至封存嗎？'))) return;
+      order.completedDate = todayStr();
+      archive.push(order);
+      orders = orders.filter(o => o.id !== order.id);
+      await saveKey('orders', orders); await saveKey('archive', archive);
+      renderOrders(); renderArchive();
+    });
+    const delBtn = document.createElement('button'); delBtn.className = 'danger-ghost'; delBtn.textContent = '刪除';
+    delBtn.addEventListener('click', async ()=>{
+      if(!(await uiConfirm('確定要刪除這筆訂單嗎？此動作無法復原。'))) return;
+      orders = orders.filter(o => o.id !== order.id);
+      await saveKey('orders', orders); renderOrders();
+    });
+    actionsWrap.appendChild(completeBtn); actionsWrap.appendChild(delBtn);
+    tdActions.appendChild(actionsWrap); tr.appendChild(tdActions);
+
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('orderCountLabel').textContent = `(${orders.length})`;
+  document.getElementById('tabBadgeOrders').textContent = orders.length;
+  updateOrderStats();
+}
+
+function updateOrderStats(){
+  const total = orders.reduce((sum,o)=> sum + (parseFloat(o.amount)||0), 0);
+  const pendingShip = orders.filter(o => o.shipStatus === '待出貨').length;
+  const unpaid = orders.filter(o => o.paymentStatus === '未付款').length;
+  document.getElementById('statOrderCount').textContent = orders.length;
+  document.getElementById('statOrderValue').textContent = fmtMoney(total);
+  document.getElementById('statPendingShip').textContent = pendingShip;
+  document.getElementById('statUnpaid').textContent = unpaid;
+}
+
+/* ================================================================
+   ARCHIVE TAB
+================================================================ */
+function renderArchive(){
+  const tbody = document.getElementById('archiveBody'); tbody.innerHTML = '';
+  if(archive.length === 0){
+    const tr = document.createElement('tr'); tr.className = 'empty-row';
+    tr.innerHTML = '<td colspan="11">尚無已封存的訂單</td>'; tbody.appendChild(tr);
+  }
+  archive.slice().reverse().forEach(order=>{
+    const tr = document.createElement('tr');
+    [order.completedDate, order.date, order.source, order.buyer, order.content,
+     order.amount ? fmtMoney(order.amount) : '—', order.discount, order.shipping, order.orderNo, order.notes].forEach(val=>{
+      const td = document.createElement('td'); td.textContent = val || '—'; tr.appendChild(td);
+    });
+    const tdActions = document.createElement('td');
+    const restoreBtn = document.createElement('button'); restoreBtn.className = 'ghost'; restoreBtn.textContent = '還原至進行中';
+    restoreBtn.addEventListener('click', async ()=>{
+      if(!(await uiConfirm('確定要將此訂單還原到進行中訂單嗎？'))) return;
+      archive = archive.filter(o => o.id !== order.id);
+      delete order.completedDate;
+      orders.push(order);
+      await saveKey('archive', archive); await saveKey('orders', orders);
+      renderArchive(); renderOrders();
+    });
+    tdActions.appendChild(restoreBtn); tr.appendChild(tdActions);
+    tbody.appendChild(tr);
+  });
+  document.getElementById('archiveCountLabel').textContent = `(${archive.length})`;
+  document.getElementById('tabBadgeArchive').textContent = archive.length;
+}
+
+document.getElementById('genReportBtn').addEventListener('click', generateReport);
+document.querySelectorAll('.quick-range').forEach(container=>{
+  container.querySelectorAll('button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const now = new Date(); let start = '', end = '';
+      if(btn.dataset.range === 'thisMonth'){ start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10); end = todayStr(); }
+      else if(btn.dataset.range === 'lastMonth'){
+        const lm = new Date(now.getFullYear(), now.getMonth()-1, 1);
+        start = lm.toISOString().slice(0,10);
+        end = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0,10);
+      } else if(btn.dataset.range === 'all'){ start = ''; end = ''; }
+      document.getElementById('reportStart').value = start;
+      document.getElementById('reportEnd').value = end;
+      generateReport();
+    });
+  });
+});
+
+function generateReport(){
+  const start = document.getElementById('reportStart').value;
+  const end = document.getElementById('reportEnd').value;
+  lastReportRange = {start, end};
+  const filtered = archive.filter(o=>{
+    const d = o.completedDate || o.date || '';
+    if(start && d < start) return false;
+    if(end && d > end) return false;
+    return true;
+  });
+  lastReportList = filtered;
+
+  const total = filtered.reduce((sum,o)=> sum + (parseFloat(o.amount)||0), 0);
+  const avg = filtered.length ? total / filtered.length : 0;
+  document.getElementById('reportCount').textContent = filtered.length;
+  document.getElementById('reportTotal').textContent = fmtMoney(total);
+  document.getElementById('reportAvg').textContent = fmtMoney(Math.round(avg));
+
+  // Profit: only orders that carry a cost snapshot (orders created after this
+  // feature). hasCost/orderProfit shared with the table rows and CSV export.
+  const withCost = filtered.filter(o => hasCostSnapshot(o));
+  const costSum = withCost.reduce((s,o)=> s + (parseFloat(o.totalCost)||0), 0);
+  const profitSum = withCost.reduce((s,o)=> s + orderProfit(o), 0);
+  document.getElementById('reportCost').textContent = fmtMoney(costSum);
+  document.getElementById('reportProfit').textContent = fmtMoney(profitSum);
+  const noCostCount = filtered.length - withCost.length;
+  document.getElementById('reportProfitNote').textContent = noCostCount > 0
+    ? `毛利僅計入含成本快照的 ${withCost.length} 筆訂單；另有 ${noCostCount} 筆較早的訂單無成本資料。`
+    : (withCost.length > 0 ? '毛利＝訂單金額－成本快照合計。' : '');
+
+  renderBreakdown('breakdownSource', groupSum(filtered, 'source'));
+  renderBreakdown('breakdownShipping', groupSum(filtered, 'shipping'));
+  renderBreakdown('breakdownOrigin', originProfitMap(filtered));
+
+  const tbody = document.getElementById('reportBody'); tbody.innerHTML = '';
+  if(filtered.length === 0){
+    const tr = document.createElement('tr'); tr.className = 'empty-row';
+    tr.innerHTML = '<td colspan="9">此區間內沒有已完成的訂單</td>'; tbody.appendChild(tr);
+  }
+  filtered.forEach(o=>{
+    const tr = document.createElement('tr');
+    const costCell = hasCostSnapshot(o) ? fmtMoney(o.totalCost) : '—';
+    const profitCell = hasCostSnapshot(o) ? fmtMoney(orderProfit(o)) : '—';
+    [o.completedDate, o.source, o.buyer, o.content, o.amount?fmtMoney(o.amount):'—', costCell, profitCell, o.shipping, o.orderNo].forEach(val=>{
+      const td = document.createElement('td'); td.textContent = val || '—'; tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  document.getElementById('reportOutput').classList.remove('hidden');
+}
+
+function hasCostSnapshot(o){ return o && typeof o.totalCost === 'number' && Array.isArray(o.items); }
+function orderProfit(o){ return (parseFloat(o.amount)||0) - (parseFloat(o.totalCost)||0); }
+// Per-item profit (price - cost from the snapshot) grouped by 貨源
+function originProfitMap(list){
+  const map = {};
+  list.forEach(o=>{
+    if(!hasCostSnapshot(o)) return;
+    o.items.forEach(it=>{
+      const key = it.source || '未指定';
+      map[key] = (map[key]||0) + ((parseFloat(it.price)||0) - (parseFloat(it.cost)||0));
+    });
+  });
+  return map;
+}
+
+function groupSum(list, field){
+  const map = {};
+  list.forEach(o=>{ const key = o[field] || '未指定'; map[key] = (map[key]||0) + (parseFloat(o.amount)||0); });
+  return map;
+}
+function renderBreakdown(elId, map){
+  const el = document.getElementById(elId); el.innerHTML = '';
+  const keys = Object.keys(map);
+  if(keys.length === 0){ el.innerHTML = '<div class="muted-small">無資料</div>'; return; }
+  keys.forEach(k=>{
+    const row = document.createElement('div'); row.className = 'breakdown-row';
+    row.innerHTML = `<span>${k}</span><span>${fmtMoney(map[k])}</span>`;
+    el.appendChild(row);
+  });
+}
+
+document.getElementById('copyReportBtn').addEventListener('click', async ()=>{
+  const {start, end} = lastReportRange;
+  const rangeLabel = (start||end) ? `${start||'最早'} ～ ${end||'最新'}` : '全部區間';
+  const total = lastReportList.reduce((sum,o)=> sum + (parseFloat(o.amount)||0), 0);
+  let text = `【訂單報表】${rangeLabel}\n共 ${lastReportList.length} 筆訂單，總金額 ${fmtMoney(total)}\n\n`;
+  lastReportList.forEach((o,idx)=>{
+    text += `${idx+1}. ${o.completedDate || ''}｜${o.source||'—'}｜${o.buyer||'—'}｜${o.content||'—'}｜${o.amount?fmtMoney(o.amount):'—'}\n`;
+  });
+  await copyText(text, document.getElementById('reportCopyHint'));
+});
+
+document.getElementById('exportCsvBtn').addEventListener('click', ()=>{
+  const headers = ['完成日期','訂單日期','訂單來源','買家','訂單內容','金額','成本','毛利','優惠','運送方式','訂單編號','付款狀態','備注'];
+  const rows = lastReportList.map(o => [o.completedDate, o.date, o.source, o.buyer, o.content, o.amount,
+    hasCostSnapshot(o) ? o.totalCost : '', hasCostSnapshot(o) ? orderProfit(o) : '',
+    o.discount || '', o.shipping, o.orderNo, o.paymentStatus, o.notes]);
+  const csvEscape = (v)=>{ const s = (v===undefined||v===null) ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s; };
+  const csv = [headers, ...rows].map(r => r.map(csvEscape).join(',')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = `訂單報表_${lastReportRange.start||'all'}_${lastReportRange.end||'all'}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  window.open(url, '_blank');
+});
+
+/* ================================================================
+   BACKUP / RESTORE  (also the cross-device interchange format:
+   the same JSON moves data between the Mac app, the iPhone web app,
+   and any future native build — because it's platform-neutral.)
+================================================================ */
+// Pack all current data + images into one portable backup object.
+async function buildBackupObject(){
+  const images = {};
+  for(const l of listings){
+    const img = await imgGet(l.id);
+    if(img) images[l.id] = img;
+  }
+  return {
+    _type: 'cd_shop_manager_backup',
+    _version: 2,
+    exportedAt: new Date().toISOString(),
+    listings, orders, archive, images
+  };
+}
+
+function isValidBackup(data){
+  return !!(data && (Array.isArray(data.listings) || Array.isArray(data.orders) || Array.isArray(data.archive)));
+}
+
+// Merge two id-keyed lists: incoming updates/adds by id; existing-only kept.
+function mergeById(existing, incoming){
+  const byId = new Map();
+  (existing||[]).forEach(x=>{ if(x && x.id) byId.set(x.id, x); });
+  const extras = [];
+  (incoming||[]).forEach(x=>{
+    if(x && x.id) byId.set(x.id, x); else if(x) extras.push(x);
+  });
+  return Array.from(byId.values()).concat(extras);
+}
+
+// Apply a backup object to storage. mode 'overwrite' (replace everything) or
+// 'merge' (add/update by id, keep records the incoming file doesn't mention).
+// Returns { restoredImgs } or throws Error('invalid').
+async function applyBackupObject(data, mode){
+  if(!isValidBackup(data)) throw new Error('invalid');
+  const inListings = Array.isArray(data.listings) ? data.listings : [];
+  const inOrders = Array.isArray(data.orders) ? data.orders : [];
+  const inArchive = Array.isArray(data.archive) ? data.archive : [];
+
+  if(mode === 'merge'){
+    listings = mergeById(listings, inListings);
+    orders = mergeById(orders, inOrders);
+    archive = mergeById(archive, inArchive);
+  } else {
+    listings = inListings; orders = inOrders; archive = inArchive;
+    // overwrite: drop images not referenced anymore
+    const oldKeys = await imgAllKeys();
+    for(const k of oldKeys){ await imgDelete(k); }
+  }
+
+  let restoredImgs = 0;
+  if(data.images && typeof data.images === 'object'){
+    for(const id of Object.keys(data.images)){
+      await imgSet(id, data.images[id]);
+      restoredImgs++;
+    }
+  }
+  // Reconcile hasImage flags with images that actually exist now
+  const keys = new Set(await imgAllKeys());
+  listings.forEach(l=>{ l.hasImage = keys.has(l.id); });
+
+  await saveKey('listings', listings);
+  await saveKey('orders', orders);
+  await saveKey('archive', archive);
+  return { restoredImgs };
+}
+
+/* ---- iCloud auto-sync (fixed file, overwritten in place) ----
+   Mac app: read+merge at launch, debounced write after every change,
+   final write on window close. iPhone PWA: manual one-tap import/export
+   of the SAME fixed-name file (iOS forbids silent file access). */
+let _syncAvailable = false, _syncTimer = null, _syncDirty = false;
+
+function scheduleSyncWrite(){
+  if(!_syncAvailable) return;
+  _syncDirty = true;
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(()=>{ flushSyncWrite(); }, 1500);
+}
+async function flushSyncWrite(){
+  if(!_syncAvailable || !_syncDirty) return;
+  _syncDirty = false;
+  clearTimeout(_syncTimer);
+  try{
+    const bk = await buildBackupObject();
+    const okW = await window.cdshopNative.syncWrite(JSON.stringify(bk));
+    if(okW){
+      const el = document.getElementById('syncLastWrite');
+      if(el) el.textContent = new Date().toLocaleTimeString('zh-TW', {hour12:false});
+    }
+  }catch(e){ console.error('同步寫入失敗：', e); }
+}
+
+async function setupSync(){
+  const row = document.getElementById('syncRow');
+  if(!row) return;
+  if(hasNative && window.cdshopNative.syncInfo){
+    let info = null;
+    try{ info = await window.cdshopNative.syncInfo(); }catch(e){}
+    if(info && info.available){
+      _syncAvailable = true;
+      row.style.display = 'block';
+      row.innerHTML = '☁️ <b style="color:var(--teal);">iCloud 自動同步已啟用</b>：開啟時自動讀取合併、資料修改與關閉視窗時自動覆寫同一個檔案。<br>'
+        + '<code style="color:var(--teal);word-break:break-all;font-family:\'JetBrains Mono\',monospace;">' + info.path + '</code>'
+        + '　<span class="muted-small">最後寫入 <span id="syncLastWrite">—</span></span>';
+      // 開啟時讀取：合併（不覆蓋），避免舊檔清掉本機較新的資料
+      try{
+        const raw = await window.cdshopNative.syncRead();
+        if(raw){
+          const data = JSON.parse(raw);
+          if(isValidBackup(data)) await applyBackupObject(data, 'merge');
+        }
+      }catch(e){ console.error('讀取同步檔失敗：', e); }
+      scheduleSyncWrite(); // 確保檔案存在且為最新（首次啟動也會建立）
+      if(window.cdshopNative.onSyncFlush){
+        window.cdshopNative.onSyncFlush(async ()=>{
+          try{ _syncDirty = true; await flushSyncWrite(); }catch(e){}
+          try{ window.cdshopNative.syncFlushDone(); }catch(e){}
+        });
+      }
+    } else {
+      row.style.display = 'block';
+      row.innerHTML = '<span style="color:var(--danger);">⚠ 找不到 iCloud 雲碟（可能未登入 iCloud），自動同步未啟用；資料仍安全存於本機資料夾。</span>';
+    }
+  } else {
+    // iPhone / 一般瀏覽器：iOS 不允許網頁自動讀寫檔案 → 一鍵手動流程
+    row.style.display = 'block';
+    row.innerHTML = '📱 <b style="color:var(--gold);">手機同步（各一鍵）</b>：開始用之前按「合併匯入」→ 選 iCloud 雲碟 › CD管理系統 › <b>CD管理系統同步.json</b>；收工前按「匯出同步檔」→ 儲存到同一位置並選「<b>取代</b>」。';
+    const b = document.getElementById('exportSyncBtn');
+    if(b) b.style.display = 'inline-block';
+  }
+}
+
+const exportSyncBtnEl = document.getElementById('exportSyncBtn');
+if(exportSyncBtnEl) exportSyncBtnEl.addEventListener('click', async ()=>{
+  const hint = document.getElementById('backupHint');
+  hint.textContent = '正在打包同步檔...';
+  hint.classList.add('show');
+  const bk = await buildBackupObject();
+  const blob = new Blob([JSON.stringify(bk)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'CD管理系統同步.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  hint.textContent = '已匯出同步檔，請存到 iCloud 雲碟 › CD管理系統，並選「取代」';
+  setTimeout(()=> hint.classList.remove('show'), 4000);
+});
+
+document.getElementById('backupBtn').addEventListener('click', async ()=>{
+  const hint = document.getElementById('backupHint');
+  hint.textContent = '正在打包資料與圖片...';
+  hint.classList.add('show');
+
+  const backup = await buildBackupObject();
+  const images = backup.images;
+  const blob = new Blob([JSON.stringify(backup)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `CD管理系統備份_${todayStr()}.json`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  window.open(url, '_blank');
+
+  hint.textContent = `已匯出備份（含 ${Object.keys(images).length} 張圖片）`;
+  setTimeout(()=> hint.classList.remove('show'), 3000);
+});
+
+// 發布公開商品頁：只送在售直購商品的白名單欄位（絕不含成本/貨源），連同圖片
+// 交給原生層寫檔並 git push 到 GitHub Pages。
+const publishShopBtnEl = document.getElementById('publishShopBtn');
+if(publishShopBtnEl) publishShopBtnEl.addEventListener('click', async ()=>{
+  if(!hasNative || !window.cdshopNative.publishShop) return;
+  const hint = document.getElementById('backupHint');
+  const btn = publishShopBtnEl;
+  btn.disabled = true;
+  hint.textContent = '正在整理商品與圖片...';
+  hint.classList.add('show');
+  try{
+    // 在售與保留中都上架（保留中會在商店頁暗化、不可選）；競標/已售出/已下架不上架。
+    const forSale = listings.filter(l => (l.status === '在售' || l.status === '保留中') && l.biddingType !== '競標');
+    // 白名單：只輸出這些欄位，成本/貨源/平台等機密欄位一律不外流。
+    const items = forSale.map(l => ({
+      id: l.id, artist: l.artist, album: l.album, price: l.price,
+      genre: l.genre, notes: l.notes, sideLabel: l.sideLabel, hasImage: !!l.hasImage,
+      reserved: l.status === '保留中'
+    }));
+    const images = {};
+    for(const l of forSale){
+      const img = await imgGet(l.id);
+      if(img) images[l.id] = img;
+    }
+    const promoEl = document.getElementById('shopPromoInput');
+    const promo = promoEl ? promoEl.value.trim() : '';
+    const res = await window.cdshopNative.publishShop({
+      generatedAt: new Date().toISOString(), items, images, promo
+    });
+    if(res && res.ok){
+      hint.textContent = `已發布 ${res.count} 件商品`;
+    }else{
+      hint.textContent = '發布失敗：' + ((res && res.error) || '未知錯誤');
+    }
+  }catch(e){
+    hint.textContent = '發布失敗：' + (e && e.message || e);
+  }finally{
+    btn.disabled = false;
+    setTimeout(()=> hint.classList.remove('show'), 6000);
+  }
+});
+
+let _pendingRestoreMode = 'overwrite';
+document.getElementById('restoreBtn').addEventListener('click', ()=>{
+  _pendingRestoreMode = 'overwrite';
+  document.getElementById('restoreFile').click();
+});
+const mergeBtnEl = document.getElementById('mergeBtn');
+if(mergeBtnEl) mergeBtnEl.addEventListener('click', ()=>{
+  _pendingRestoreMode = 'merge';
+  document.getElementById('restoreFile').click();
+});
+document.getElementById('restoreFile').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const mode = _pendingRestoreMode;
+  const reader = new FileReader();
+  reader.onload = async (ev)=>{
+    let data;
+    try{ data = JSON.parse(ev.target.result); }
+    catch(err){ await uiAlert('檔案格式錯誤，無法解析。'); document.getElementById('restoreFile').value=''; return; }
+    if(!isValidBackup(data)){ await uiAlert('這不是有效的備份檔。'); document.getElementById('restoreFile').value=''; return; }
+
+    const confirmMsg = mode === 'merge'
+      ? '合併匯入：會把這個檔案裡的商品／訂單依編號「新增或更新」進目前資料，不會刪除你現有的其他資料。確定要繼續嗎？'
+      : '還原備份會「覆蓋」目前所有資料（含圖片），確定要繼續嗎？（建議先備份現有資料）';
+    const ok = await uiConfirm(confirmMsg);
+    if(!ok){ document.getElementById('restoreFile').value = ''; return; }
+
+    let restoredImgs = 0;
+    try{ ({restoredImgs} = await applyBackupObject(data, mode)); }
+    catch(err){ await uiAlert('匯入失敗：資料格式不正確。'); document.getElementById('restoreFile').value=''; return; }
+
+    selectedListingIds.clear();
+    renderListings(); renderOrders(); renderArchive();
+
+    const hint = document.getElementById('backupHint');
+    hint.textContent = `${mode === 'merge' ? '已合併匯入' : '已成功還原備份'}${restoredImgs ? `（含 ${restoredImgs} 張圖片）` : ''}`;
+    hint.classList.add('show');
+    setTimeout(()=> hint.classList.remove('show'), 3500);
+    document.getElementById('restoreFile').value = '';
+  };
+  reader.readAsText(file);
+});
+
+/* ================================================================
+   INIT
+================================================================ */
+// When running as the desktop app, show where data actually lives on disk
+// and warn if we had to fall back (e.g. the .app was moved somewhere unwritable).
+// Shop promo text — stored as a one-element array so it round-trips through the
+// array-oriented loadKey/saveKey without special casing.
+async function loadShopPromo(){
+  const a = await loadKey('shopPromo');
+  return (Array.isArray(a) && a[0]) ? String(a[0]) : '';
+}
+async function saveShopPromo(text){ await saveKey('shopPromo', [text || '']); }
+
+async function showNativeStorageInfo(){
+  if(!hasNative || !window.cdshopNative.info) return;
+  try{
+    const info = await window.cdshopNative.info();
+    const noteText = document.getElementById('storageNoteText');
+    if(noteText) noteText.textContent = '所有商品資料與圖片都以真實檔案存在下方資料夾（不是瀏覽器儲存，清瀏覽器也不會消失）。搬移 App 時請連同這個資料夾一起搬。'
+      + (info.snapshotCount ? `另已自動保留最近 ${info.snapshotCount} 天的備份快照（snapshots 子資料夾），誤刪可救回。` : '仍建議定期用「備份資料」匯出一份 JSON 另存一份。');
+    document.getElementById('nativePathRow').style.display = 'block';
+    document.getElementById('dataDirPath').textContent = info.dataDir;
+    const revealBtn = document.getElementById('revealBtn');
+    revealBtn.style.display = 'inline-block';
+    revealBtn.addEventListener('click', ()=> window.cdshopNative.reveal());
+    const publishBtn = document.getElementById('publishShopBtn');
+    if(publishBtn) publishBtn.style.display = 'inline-block';
+    // 商品頁優惠公告：只有桌面後台能編輯，載入既有值、變更即存
+    const promoRow = document.getElementById('promoRow');
+    const promoInput = document.getElementById('shopPromoInput');
+    if(promoRow && promoInput){
+      promoRow.style.display = 'block';
+      promoInput.value = await loadShopPromo();
+      promoInput.addEventListener('change', ()=> saveShopPromo(promoInput.value.trim()));
+    }
+    if(info.fellBack){
+      const warn = document.getElementById('nativeWarnRow');
+      warn.style.display = 'block';
+      warn.innerHTML = `⚠ 無法寫入預期位置（${info.intended||''}），已改存到上方路徑。若你把 App 拖進了「應用程式」資料夾，建議把 App 移回一般資料夾，讓資料能存在旁邊。`;
+    }
+  }catch(e){ console.error('讀取儲存資訊失敗：', e); }
+}
+
+// 今日待辦：開啟時掃描一次，有事才顯示。點行可跳到對應分頁。
+function renderTodoBanner(){
+  const el = document.getElementById('todoBanner');
+  if(!el) return;
+  const now = new Date();
+  const today = todayStr();
+  const active = listings.filter(l => l.status === '在售' && l.biddingType === '競標' && l.auctionEnd);
+  const endedUnhandled = active.filter(l => new Date(l.auctionEnd) <= now);
+  const endingToday = active.filter(l => (l.auctionEnd||'').slice(0,10) === today && new Date(l.auctionEnd) > now);
+  const pendingShip = orders.filter(o => o.shipStatus === '待出貨');
+  const unpaid = orders.filter(o => o.paymentStatus === '未付款');
+
+  const lines = [];
+  const nameList = arr => arr.slice(0,3).map(l=>formatName(l.artist,l.album)).join('、') + (arr.length>3 ? ` 等 ${arr.length} 筆` : '');
+  if(endedUnhandled.length) lines.push({tab:'listings', html:`🔔 <b style="color:var(--gold);">${endedUnhandled.length} 筆競標已截標待處理</b>：${nameList(endedUnhandled)}`});
+  if(endingToday.length) lines.push({tab:'listings', html:`⏰ 今日截標 ${endingToday.length} 筆：${nameList(endingToday)}`});
+  if(pendingShip.length) lines.push({tab:'orders', html:`📦 待出貨訂單 ${pendingShip.length} 筆`});
+  if(unpaid.length) lines.push({tab:'orders', html:`💰 未付款訂單 ${unpaid.length} 筆`});
+
+  if(lines.length === 0){ el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.innerHTML = '<b style="color:var(--teal);">今日待辦</b>';
+  lines.forEach(ln=>{
+    const row = document.createElement('div');
+    row.innerHTML = ln.html;
+    row.style.cursor = 'pointer';
+    row.title = '點擊前往';
+    row.addEventListener('click', ()=> switchTab(ln.tab));
+    el.appendChild(row);
+  });
+  el.style.display = 'block';
+}
+
+async function init(){
+  await showNativeStorageInfo();
+  listings = await loadKey('listings');
+  orders = await loadKey('orders');
+  archive = await loadKey('archive');
+
+  // iCloud 同步：開啟時讀取同步檔（合併），並啟動自動寫入
+  await setupSync();
+
+  // Reconcile image indicator flags with what actually exists in IndexedDB
+  try{
+    const keys = new Set(await imgAllKeys());
+    let changed = false;
+    listings.forEach(l=>{
+      const has = keys.has(l.id);
+      if(!!l.hasImage !== has){ l.hasImage = has; changed = true; }
+    });
+    if(changed) await saveKey('listings', listings);
+  }catch(e){}
+
+  renderListings(); renderOrders(); renderArchive();
+  renderTodoBanner();
+}
+init().then(()=>{ window.__cdReady = true; });
+
+// PWA: register the service worker only when served over http(s) (not in Electron file://)
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  window.addEventListener('load', ()=>{ navigator.serviceWorker.register('./sw.js').catch(()=>{}); });
+}
+</script>
+</body>
+</html>

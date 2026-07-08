@@ -1,0 +1,16 @@
+{
+  "name": "CD 出貨管理系統",
+  "short_name": "CD管理",
+  "description": "CD 出清上架、訂單與封存管理",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#121319",
+  "theme_color": "#121319",
+  "icons": [
+    { "src": "pwa/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "pwa/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "pwa/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
