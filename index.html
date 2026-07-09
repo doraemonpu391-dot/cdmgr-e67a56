@@ -202,6 +202,10 @@
     </div>
     <div id="nativeWarnRow" style="display:none;margin-top:8px;color:var(--danger);font-size:12.5px;line-height:1.6;"></div>
     <div id="syncRow" style="display:none;margin-top:8px;font-size:12.5px;line-height:1.7;"></div>
+    <div id="introRow" style="display:none;margin-top:12px;">
+      <label class="field" style="display:block;font-size:12px;color:var(--teal);margin-bottom:4px;">商品頁最上方介紹（歡迎詞／使用說明／你的 FB・Threads・IG，顯示為 teal 色無框文字；只有你能編輯，改完按「發布商品頁」才更新）</label>
+      <textarea id="shopIntroInput" placeholder="歡迎詞、購買說明、你的社群帳號…" style="width:100%;min-height:120px;background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;line-height:1.7;resize:vertical;"></textarea>
+    </div>
     <div id="promoRow" style="display:none;margin-top:12px;">
       <label class="field" style="display:block;font-size:12px;color:var(--gold);margin-bottom:4px;">商品頁優惠公告（顯示在公開商品頁最上方，只有你能編輯；改完按「發布商品頁」才會更新）</label>
       <textarea id="shopPromoInput" placeholder="例如：本週優惠 買三片折 NT$50！面交可再議～" style="width:100%;min-height:52px;background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;resize:vertical;"></textarea>
@@ -2449,8 +2453,10 @@ if(publishShopBtnEl) publishShopBtnEl.addEventListener('click', async ()=>{
     }
     const promoEl = document.getElementById('shopPromoInput');
     const promo = promoEl ? promoEl.value.trim() : '';
+    const introEl = document.getElementById('shopIntroInput');
+    const intro = introEl ? introEl.value.trim() : '';
     const res = await window.cdshopNative.publishShop({
-      generatedAt: new Date().toISOString(), items, images, promo
+      generatedAt: new Date().toISOString(), items, images, promo, intro
     });
     if(res && res.ok){
       hint.textContent = `已發布 ${res.count} 件商品`;
@@ -2521,6 +2527,28 @@ async function loadShopPromo(){
 }
 async function saveShopPromo(text){ await saveKey('shopPromo', [text || '']); }
 
+// 商品頁最上方介紹（歡迎詞/使用說明/社群帳號）— 同樣存為單元素陣列
+async function loadShopIntro(){
+  const a = await loadKey('shopIntro');
+  return (Array.isArray(a) && a[0]) ? String(a[0]) : '';
+}
+async function saveShopIntro(text){ await saveKey('shopIntro', [text || '']); }
+// 首次使用時預填的範例（使用者可直接改成自己的帳號再發布）
+const EXAMPLE_INTRO = [
+  '👋 歡迎光臨我的 CD 出清小舖！',
+  '',
+  '【怎麼買】',
+  '1. 點商品下方「加入選購」，右下角會顯示已選件數與小計。',
+  '2. 選好後按「複製清單」，把內容私訊給我即可，我會盡快回覆。',
+  '3. 標「保留中」的商品代表有人洽談中，暫時無法選購。',
+  '',
+  '【交易・聯絡我】',
+  '面交：板橋，或 7-11／全家店到店（+60）、可賣貨便',
+  'Facebook：你的粉專名稱',
+  'Threads：@你的帳號',
+  'Instagram：@你的帳號'
+].join('\n');
+
 async function showNativeStorageInfo(){
   if(!hasNative || !window.cdshopNative.info) return;
   try{
@@ -2535,6 +2563,15 @@ async function showNativeStorageInfo(){
     revealBtn.addEventListener('click', ()=> window.cdshopNative.reveal());
     const publishBtn = document.getElementById('publishShopBtn');
     if(publishBtn) publishBtn.style.display = 'inline-block';
+    // 商品頁最上方介紹：只有桌面後台能編輯；沒設過就預填範例讓你直接改
+    const introRow = document.getElementById('introRow');
+    const introInput = document.getElementById('shopIntroInput');
+    if(introRow && introInput){
+      introRow.style.display = 'block';
+      const savedIntro = await loadShopIntro();
+      introInput.value = savedIntro || EXAMPLE_INTRO;
+      introInput.addEventListener('change', ()=> saveShopIntro(introInput.value.trim()));
+    }
     // 商品頁優惠公告：只有桌面後台能編輯，載入既有值、變更即存
     const promoRow = document.getElementById('promoRow');
     const promoInput = document.getElementById('shopPromoInput');
