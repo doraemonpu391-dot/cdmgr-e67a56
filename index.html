@@ -461,6 +461,7 @@
           <div><label class="field">付款狀態</label><select id="orderPaymentSel"></select></div>
           <div><label class="field">訂單編號（選填）</label><input type="text" id="orderNoInput"></div>
           <div><label class="field">訂單金額（可調整）</label><input type="number" id="orderAmount" min="0"></div>
+          <div><label class="field">訂單成本（自動帶入，可調整）</label><input type="number" id="orderCost" min="0"></div>
           <div><label class="field">優惠內容（選填）</label><input type="text" id="orderDiscount" placeholder="例如：買三片折50"></div>
           <div><label class="field">備注（選填）</label><input type="text" id="orderNotesInput"></div>
         </div>
@@ -502,7 +503,7 @@
         <table class="orders-table" id="ordersTable">
           <thead>
             <tr>
-              <th>日期</th><th>訂單來源</th><th>買家</th><th>訂單內容</th><th>金額</th><th>運送方式</th>
+              <th>日期</th><th>訂單來源</th><th>買家</th><th>訂單內容</th><th>金額</th><th>成本</th><th>運送方式</th>
               <th>訂單編號</th><th>出貨狀態</th><th>付款狀態</th><th>優惠</th><th>備注</th><th>操作</th>
             </tr>
           </thead>
@@ -561,7 +562,7 @@
       <h2>已封存訂單 <span class="count" id="archiveCountLabel">(0)</span></h2>
       <div class="table-scroll">
         <table class="archive-table" id="archiveTable">
-          <thead><tr><th>完成日期</th><th>訂單日期</th><th>訂單來源</th><th>買家</th><th>訂單內容</th><th>金額</th><th>優惠</th><th>運送方式</th><th>訂單編號</th><th>備注</th><th>操作</th></tr></thead>
+          <thead><tr><th>完成日期</th><th>訂單日期</th><th>訂單來源</th><th>買家</th><th>訂單內容</th><th>金額</th><th>成本</th><th>毛利</th><th>優惠</th><th>運送方式</th><th>訂單編號</th><th>備注</th><th>操作</th></tr></thead>
           <tbody id="archiveBody"></tbody>
         </table>
       </div>
@@ -1975,9 +1976,10 @@ document.getElementById('createOrderBtn').addEventListener('click', async ()=>{
   // Build item summary + default total
   const listEl = document.getElementById('orderPanelItems');
   listEl.innerHTML = '';
-  let total = 0;
+  let total = 0, costTotal = 0;
   selected.forEach(l=>{
     total += parseFloat(l.price)||0;
+    costTotal += parseFloat(l.cost)||0;
     const row = document.createElement('div');
     row.style.padding = '2px 0';
     row.textContent = `• ${formatName(l.artist, l.album)}　${l.price ? fmtMoney(l.price) : '未定價'}`;
@@ -1991,6 +1993,7 @@ document.getElementById('createOrderBtn').addEventListener('click', async ()=>{
   document.getElementById('orderBuyer').value = '';
   document.getElementById('orderNoInput').value = '';
   document.getElementById('orderAmount').value = total || '';
+  document.getElementById('orderCost').value = costTotal || '';
   document.getElementById('orderDiscount').value = '';
   document.getElementById('orderNotesInput').value = '';
 
@@ -2015,7 +2018,10 @@ document.getElementById('confirmOrderBtn').addEventListener('click', async ()=>{
     cost: parseFloat(l.cost) || 0,
     source: l.source || ''
   }));
-  const totalCost = items.reduce((s, it) => s + it.cost, 0);
+  const costField = document.getElementById('orderCost').value;
+  const totalCost = (costField !== '' && isFinite(parseFloat(costField)))
+    ? parseFloat(costField)
+    : items.reduce((s, it) => s + it.cost, 0);
   orders.push({
     id: genId(),
     date: document.getElementById('orderDate').value || todayStr(),
@@ -2081,7 +2087,7 @@ function renderOrders(){
   const tbody = document.getElementById('ordersBody'); tbody.innerHTML = '';
   if(orders.length === 0){
     const tr = document.createElement('tr'); tr.className = 'empty-row';
-    tr.innerHTML = '<td colspan="12">目前沒有進行中的訂單</td>'; tbody.appendChild(tr);
+    tr.innerHTML = '<td colspan="13">目前沒有進行中的訂單</td>'; tbody.appendChild(tr);
   }
   orders.forEach(order=>{
     const tr = document.createElement('tr'); tr.dataset.id = order.id;
@@ -2092,6 +2098,7 @@ function renderOrders(){
     const tdBuyer = document.createElement('td'); tdBuyer.appendChild(makeTextInput(order.buyer, v=>{ order.buyer=v; persist(); })); tr.appendChild(tdBuyer);
     const tdContent = document.createElement('td'); tdContent.appendChild(makeTextInput(order.content, v=>{ order.content=v; persist(); }, true)); tr.appendChild(tdContent);
     const tdAmount = document.createElement('td'); tdAmount.appendChild(makeNumberInput(order.amount, v=>{ order.amount=v; persist(); updateOrderStats(); })); tr.appendChild(tdAmount);
+    const tdCost = document.createElement('td'); tdCost.appendChild(makeNumberInput(order.totalCost, v=>{ order.totalCost = (v===''?'':(parseFloat(v)||0)); persist(); })); tr.appendChild(tdCost);
     const tdShipping = document.createElement('td'); tdShipping.appendChild(makeSelect(SHIPPING_METHODS, order.shipping, v=>{ order.shipping=v; persist(); }, true)); tr.appendChild(tdShipping);
 
     const tdOrderNo = document.createElement('td');
@@ -2155,12 +2162,14 @@ function renderArchive(){
   const tbody = document.getElementById('archiveBody'); tbody.innerHTML = '';
   if(archive.length === 0){
     const tr = document.createElement('tr'); tr.className = 'empty-row';
-    tr.innerHTML = '<td colspan="11">尚無已封存的訂單</td>'; tbody.appendChild(tr);
+    tr.innerHTML = '<td colspan="13">尚無已封存的訂單</td>'; tbody.appendChild(tr);
   }
   archive.slice().reverse().forEach(order=>{
     const tr = document.createElement('tr');
+    const costCell = hasCostSnapshot(order) ? fmtMoney(order.totalCost) : '—';
+    const profitCell = hasCostSnapshot(order) ? fmtMoney(orderProfit(order)) : '—';
     [order.completedDate, order.date, order.source, order.buyer, order.content,
-     order.amount ? fmtMoney(order.amount) : '—', order.discount, order.shipping, order.orderNo, order.notes].forEach(val=>{
+     order.amount ? fmtMoney(order.amount) : '—', costCell, profitCell, order.discount, order.shipping, order.orderNo, order.notes].forEach(val=>{
       const td = document.createElement('td'); td.textContent = val || '—'; tr.appendChild(td);
     });
     const tdActions = document.createElement('td');
@@ -2249,13 +2258,15 @@ function generateReport(){
   document.getElementById('reportOutput').classList.remove('hidden');
 }
 
-function hasCostSnapshot(o){ return o && typeof o.totalCost === 'number' && Array.isArray(o.items); }
+// 只要訂單有數字成本就納入毛利計算——舊訂單手動補填成本後也算得出來
+// （items 快照只有「依貨源毛利」需要，見 originProfitMap）。
+function hasCostSnapshot(o){ return !!o && o.totalCost !== null && o.totalCost !== undefined && o.totalCost !== '' && isFinite(parseFloat(o.totalCost)); }
 function orderProfit(o){ return (parseFloat(o.amount)||0) - (parseFloat(o.totalCost)||0); }
 // Per-item profit (price - cost from the snapshot) grouped by 貨源
 function originProfitMap(list){
   const map = {};
   list.forEach(o=>{
-    if(!hasCostSnapshot(o)) return;
+    if(!Array.isArray(o.items)) return;   // 手動補填成本的舊訂單沒有明細快照
     o.items.forEach(it=>{
       const key = it.source || '未指定';
       map[key] = (map[key]||0) + ((parseFloat(it.price)||0) - (parseFloat(it.cost)||0));
