@@ -1134,6 +1134,9 @@ async function generateComposite(){
 // ---- Captions (with / without AI intro) ----
 const CAPTION_HEADER = `【CD 出清販售】`;
 const CAPTION_FOOTER = `交易方式7-11/全家+60或板橋面交自取，可賣貨便，有興趣或想詳細看片況請留言或私訊詢問！`;
+// 導流到商品頁的行動呼籲（附永久短網址）
+const SHOP_SHORT_URL = 'https://tinyurl.com/arprecordstw';
+const CAPTION_CTA = `也歡迎來到我的商品頁選購，購買多片有優惠，網址如下：\n${SHOP_SHORT_URL}`;
 
 // items with their original composerState slot index
 function composerItemsWithIndex(){
@@ -1156,7 +1159,7 @@ function buildCaptionFromIntros(introBySlot){
     if(s.notes) block += `\n　備注：${s.notes}`;
     return block;
   });
-  return `${CAPTION_HEADER}\n\n${blocks.join('\n\n')}\n\n${CAPTION_FOOTER}`;
+  return `${CAPTION_HEADER}\n\n${blocks.join('\n\n')}\n\n${CAPTION_FOOTER}\n\n${CAPTION_CTA}`;
 }
 
 async function fetchAlbumIntro(artist, album){
