@@ -83,5 +83,30 @@
       bySource, byDevice, byBrowser, byLang, searches, series, recent };
   }
 
-  return { aggregateEvents, deviceOf, browserOf, dayKey };
+  // Build the Apps Script events endpoint URL.
+  function buildEventsUrl(url, key, extra) {
+    var u = String(url || '');
+    u += (u.indexOf('?') === -1 ? '?' : '&') + 'action=events&key=' + encodeURIComponent(key || '');
+    if (extra) u += '&' + extra;
+    return u;
+  }
+
+  // Turn a raw Apps Script response body into { events } or { error }.
+  // Google serves an HTML login/permission page when the web app isn't public —
+  // that's the "Unexpected token '<'" case, so name it explicitly.
+  function parseEventsResponse(text) {
+    var t = String(text == null ? '' : text);
+    var data;
+    try { data = JSON.parse(t); }
+    catch (e) {
+      if (/^\s*<(!doctype|html)/i.test(t)) {
+        return { error: 'Apps Script 回傳的是一個網頁而不是資料。多半是「部署 → 誰可以存取」沒設成「任何人」，或網址不是結尾 /exec 的網頁應用程式 URL。請到 Apps Script → 部署 → 管理部署作業，把存取權設為「任何人」並重新部署，再貼一次網址。' };
+      }
+      return { error: '回傳的不是 JSON：' + t.slice(0, 80) };
+    }
+    if (data && data.error) return { error: '讀取失敗：' + data.error + '（請確認密鑰 STATS_KEY 是否一致）' };
+    return { events: (data && Array.isArray(data.events)) ? data.events : [] };
+  }
+
+  return { aggregateEvents, deviceOf, browserOf, dayKey, buildEventsUrl, parseEventsResponse };
 });

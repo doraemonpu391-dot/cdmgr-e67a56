@@ -2627,9 +2627,53 @@ function anaRecent(recent){
     tb.appendChild(tr);
   });
 }
+// JSONP：手機/瀏覽器若被 CORS 擋下時的後備（Apps Script 支援 ?callback=）
+function jsonpEvents(url, key){
+  return new Promise((resolve, reject)=>{
+    const cb = '__anaCb' + Date.now() + Math.floor(Math.random()*1e6);
+    const s = document.createElement('script');
+    const to = setTimeout(()=>{ cleanup(); reject(new Error('逾時')); }, 12000);
+    function cleanup(){ clearTimeout(to); try{ delete window[cb]; }catch(_){ window[cb]=undefined; } if(s.parentNode) s.parentNode.removeChild(s); }
+    window[cb] = (data)=>{
+      cleanup();
+      if(data && data.error) resolve({ error:'讀取失敗：'+data.error+'（請確認密鑰 STATS_KEY 是否一致）' });
+      else resolve({ events: (data && Array.isArray(data.events)) ? data.events : [] });
+    };
+    s.onerror = ()=>{ cleanup(); reject(new Error('JSONP 載入失敗')); };
+    s.src = CDAnalytics.buildEventsUrl(url, key, 'callback='+cb);
+    document.head.appendChild(s);
+  });
+}
+// Mac：走主程序（免 CORS）。手機/瀏覽器：直接抓，被擋就退回 JSONP。
+async function fetchEvents(url, key){
+  if(hasNative && window.cdshopNative.fetchAnalytics){
+    return await window.cdshopNative.fetchAnalytics(url, key);
+  }
+  try{
+    const res = await fetch(CDAnalytics.buildEventsUrl(url, key), { redirect:'follow' });
+    return CDAnalytics.parseEventsResponse(await res.text());
+  }catch(e){
+    try{ return await jsonpEvents(url, key); }
+    catch(e2){ return { error:'讀取失敗（瀏覽器安全限制擋下，且 JSONP 後備也失敗）：'+(e2&&e2.message||e2)+'。請確認 Apps Script 已重新部署且存取權為「任何人」。' }; }
+  }
+}
+// 訪客追蹤設定與數據分頁：Mac 與手機都可用
+async function setupAnalyticsUI(){
+  const anaTabBtn = document.getElementById('tabBtnAnalytics');
+  if(anaTabBtn) anaTabBtn.style.display = '';
+  const trackRow = document.getElementById('trackRow');
+  const trackUrlInput = document.getElementById('trackUrlInput');
+  const trackKeyInput = document.getElementById('trackKeyInput');
+  if(trackRow && trackUrlInput && trackKeyInput){
+    trackRow.style.display = 'block';
+    trackUrlInput.value = await loadShopTrackUrl();
+    trackKeyInput.value = await loadShopStatsKey();
+    trackUrlInput.addEventListener('change', ()=> saveShopTrackUrl(trackUrlInput.value.trim()));
+    trackKeyInput.addEventListener('change', ()=> saveShopStatsKey(trackKeyInput.value.trim()));
+  }
+}
 let _anaLoading=false;
 async function loadAnalytics(){
-  if(!hasNative || !window.cdshopNative.fetchAnalytics) return;
   const nc=document.getElementById('anaNotConfigured'), err=document.getElementById('anaError'), body=document.getElementById('anaBody');
   const url = await loadShopTrackUrl(), key = await loadShopStatsKey();
   nc.style.display='none'; err.style.display='none';
@@ -2637,7 +2681,7 @@ async function loadAnalytics(){
   if(_anaLoading) return; _anaLoading=true;
   document.getElementById('anaUpdated').textContent='讀取中…';
   try{
-    const res = await window.cdshopNative.fetchAnalytics(url, key);
+    const res = await fetchEvents(url, key);
     if(!res || res.error){ err.textContent = (res && res.error) || '讀取失敗'; err.style.display='block'; body.style.display='none'; document.getElementById('anaUpdated').textContent=''; return; }
     const stats = CDAnalytics.aggregateEvents(res.events, 30);
     document.getElementById('anaTotal').textContent = stats.total;
@@ -2683,8 +2727,6 @@ async function showNativeStorageInfo(){
     revealBtn.addEventListener('click', ()=> window.cdshopNative.reveal());
     const publishBtn = document.getElementById('publishShopBtn');
     if(publishBtn) publishBtn.style.display = 'inline-block';
-    const anaTabBtn = document.getElementById('tabBtnAnalytics');
-    if(anaTabBtn) anaTabBtn.style.display = '';
     // 商品頁最上方介紹：只有桌面後台能編輯；沒設過就預填範例讓你直接改
     const introRow = document.getElementById('introRow');
     const introInput = document.getElementById('shopIntroInput');
@@ -2701,17 +2743,6 @@ async function showNativeStorageInfo(){
       promoRow.style.display = 'block';
       promoInput.value = await loadShopPromo();
       promoInput.addEventListener('change', ()=> saveShopPromo(promoInput.value.trim()));
-    }
-    // 訪客追蹤設定
-    const trackRow = document.getElementById('trackRow');
-    const trackUrlInput = document.getElementById('trackUrlInput');
-    const trackKeyInput = document.getElementById('trackKeyInput');
-    if(trackRow && trackUrlInput && trackKeyInput){
-      trackRow.style.display = 'block';
-      trackUrlInput.value = await loadShopTrackUrl();
-      trackKeyInput.value = await loadShopStatsKey();
-      trackUrlInput.addEventListener('change', ()=> saveShopTrackUrl(trackUrlInput.value.trim()));
-      trackKeyInput.addEventListener('change', ()=> saveShopStatsKey(trackKeyInput.value.trim()));
     }
     if(info.fellBack){
       const warn = document.getElementById('nativeWarnRow');
@@ -2755,6 +2786,7 @@ function renderTodoBanner(){
 
 async function init(){
   await showNativeStorageInfo();
+  await setupAnalyticsUI();
   listings = await loadKey('listings');
   orders = await loadKey('orders');
   archive = await loadKey('archive');
