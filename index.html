@@ -210,6 +210,10 @@
       <label class="field" style="display:block;font-size:12px;color:var(--gold);margin-bottom:4px;">商品頁優惠公告（顯示在公開商品頁最上方，只有你能編輯；改完按「發布商品頁」才會更新）</label>
       <textarea id="shopPromoInput" placeholder="例如：本週優惠 買三片折 NT$50！面交可再議～" style="width:100%;min-height:52px;background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;resize:vertical;"></textarea>
     </div>
+    <div id="ghRow" style="display:none;margin-top:12px;">
+      <label class="field" style="display:block;font-size:12px;color:var(--gold);margin-bottom:4px;">手機發布用 GitHub Token（fine-grained，只給 <b>cd-shop-manager</b> 這個 repo 的 Contents 讀寫權限）。設定後手機也能按「發布商品頁」。</label>
+      <input type="password" id="ghTokenInput" placeholder="github_pat_..." autocomplete="off" style="width:100%;background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;">
+    </div>
     <div id="trackRow" style="display:none;margin-top:12px;">
       <label class="field" style="display:block;font-size:12px;color:var(--teal);margin-bottom:4px;">訪客追蹤設定（Google Apps Script 網址與密鑰；設定後發布商品頁即開始記錄訪客，可到「數據分析」分頁看統計）</label>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -600,6 +604,7 @@
 </div>
 
 <script src="analytics.js"></script>
+<script src="ghpublish.js"></script>
 <script>
 // ---------------------------------------------------------------
 // Constants
@@ -2475,45 +2480,75 @@ document.getElementById('backupBtn').addEventListener('click', async ()=>{
 // 發布公開商品頁：只送在售直購商品的白名單欄位（絕不含成本/貨源），連同圖片
 // 交給原生層寫檔並 git push 到 GitHub Pages。
 const publishShopBtnEl = document.getElementById('publishShopBtn');
+const GH_OWNER = 'doraemonpu391-dot', GH_REPO = 'cd-shop-manager', GH_BRANCH = 'main';
+async function loadGhToken(){ const a = await loadKey('ghToken'); return (Array.isArray(a) && a[0]) ? String(a[0]) : ''; }
+async function saveGhToken(v){ await saveKey('ghToken', [v || '']); }
+
+// 蒐集要發布的內容。注意：手機端 promo/intro 的輸入框是隱藏的（值為空），
+// 若直接讀輸入框會把商店的公告與介紹清空 → 非 native 一律從儲存讀取。
+async function buildPublishPayload(){
+  const forSale = listings.filter(l => (l.status === '在售' || l.status === '保留中') && l.biddingType !== '競標');
+  const items = forSale.map(l => ({
+    id: l.id, artist: l.artist, album: l.album, price: l.price,
+    genre: l.genre, notes: l.notes, sideLabel: l.sideLabel, hasImage: !!l.hasImage,
+    reserved: l.status === '保留中'
+  }));
+  const images = {};
+  for(const l of forSale){ const img = await imgGet(l.id); if(img) images[l.id] = img; }
+  let promo, intro;
+  if(hasNative){
+    const promoEl = document.getElementById('shopPromoInput');
+    const introEl = document.getElementById('shopIntroInput');
+    promo = promoEl ? promoEl.value.trim() : '';
+    intro = introEl ? introEl.value.trim() : '';
+  }else{
+    promo = await loadShopPromo();
+    intro = await loadShopIntro();
+  }
+  const trackUrl = await loadShopTrackUrl();
+  return { generatedAt: new Date().toISOString(), items, images, promo, intro, trackUrl };
+}
+async function sha1HexBrowser(bytes){
+  const buf = await crypto.subtle.digest('SHA-1', bytes);
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+// 手機/瀏覽器：用 GitHub API 一次 commit 寫入 catalog.json 與變動的圖片
+async function publishViaGitHub(payload, hint){
+  const token = await loadGhToken();
+  if(!token){ await uiAlert('請先在上方填入 GitHub Token（fine-grained，只給 cd-shop-manager 這個 repo 的 Contents 讀寫權限）。'); return null; }
+  const catalogJson = JSON.stringify({
+    generatedAt: payload.generatedAt, items: payload.items,
+    promo: payload.promo, intro: payload.intro, trackUrl: payload.trackUrl
+  }, null, 2);
+  return await CDGitHubPublish.publishShopToGitHub({
+    token, owner: GH_OWNER, repo: GH_REPO, branch: GH_BRANCH,
+    catalogJson, images: payload.images,
+    fetchImpl: (u, i)=> fetch(u, i), sha1Hex: sha1HexBrowser,
+    onProgress: (m)=>{ hint.textContent = m; }
+  });
+}
 if(publishShopBtnEl) publishShopBtnEl.addEventListener('click', async ()=>{
-  if(!hasNative || !window.cdshopNative.publishShop) return;
   const hint = document.getElementById('backupHint');
-  const btn = publishShopBtnEl;
-  btn.disabled = true;
+  publishShopBtnEl.disabled = true;
   hint.textContent = '正在整理商品與圖片...';
   hint.classList.add('show');
   try{
-    // 在售與保留中都上架（保留中會在商店頁暗化、不可選）；競標/已售出/已下架不上架。
-    const forSale = listings.filter(l => (l.status === '在售' || l.status === '保留中') && l.biddingType !== '競標');
-    // 白名單：只輸出這些欄位，成本/貨源/平台等機密欄位一律不外流。
-    const items = forSale.map(l => ({
-      id: l.id, artist: l.artist, album: l.album, price: l.price,
-      genre: l.genre, notes: l.notes, sideLabel: l.sideLabel, hasImage: !!l.hasImage,
-      reserved: l.status === '保留中'
-    }));
-    const images = {};
-    for(const l of forSale){
-      const img = await imgGet(l.id);
-      if(img) images[l.id] = img;
-    }
-    const promoEl = document.getElementById('shopPromoInput');
-    const promo = promoEl ? promoEl.value.trim() : '';
-    const introEl = document.getElementById('shopIntroInput');
-    const intro = introEl ? introEl.value.trim() : '';
-    const trackUrl = await loadShopTrackUrl();
-    const res = await window.cdshopNative.publishShop({
-      generatedAt: new Date().toISOString(), items, images, promo, intro, trackUrl
-    });
-    if(res && res.ok){
-      hint.textContent = `已發布 ${res.count} 件商品`;
+    const payload = await buildPublishPayload();
+    if(hasNative && window.cdshopNative.publishShop){
+      const res = await window.cdshopNative.publishShop(payload);
+      hint.textContent = (res && res.ok) ? `已發布 ${res.count} 件商品`
+        : '發布失敗：' + ((res && res.error) || '未知錯誤');
     }else{
-      hint.textContent = '發布失敗：' + ((res && res.error) || '未知錯誤');
+      const r = await publishViaGitHub(payload, hint);
+      hint.textContent = r
+        ? `已從手機發布 ${payload.items.length} 件商品（新圖 ${r.uploaded}、沿用 ${r.skipped}、移除 ${r.deleted}）`
+        : '已取消發布';
     }
   }catch(e){
     hint.textContent = '發布失敗：' + (e && e.message || e);
   }finally{
-    btn.disabled = false;
-    setTimeout(()=> hint.classList.remove('show'), 6000);
+    publishShopBtnEl.disabled = false;
+    setTimeout(()=> hint.classList.remove('show'), 8000);
   }
 });
 
@@ -2657,6 +2692,18 @@ async function fetchEvents(url, key){
     catch(e2){ return { error:'讀取失敗（瀏覽器安全限制擋下，且 JSONP 後備也失敗）：'+(e2&&e2.message||e2)+'。請確認 Apps Script 已重新部署且存取權為「任何人」。' }; }
   }
 }
+// 手機/瀏覽器：顯示 GitHub Token 欄位與發布按鈕（Mac 走原生 git，不需 token）
+async function setupMobilePublishUI(){
+  if(hasNative) return;
+  const row = document.getElementById('ghRow'), inp = document.getElementById('ghTokenInput');
+  if(row && inp){
+    row.style.display = 'block';
+    inp.value = await loadGhToken();
+    inp.addEventListener('change', ()=> saveGhToken(inp.value.trim()));
+  }
+  const btn = document.getElementById('publishShopBtn');
+  if(btn) btn.style.display = 'inline-block';
+}
 // 訪客追蹤設定與數據分頁：Mac 與手機都可用
 async function setupAnalyticsUI(){
   const anaTabBtn = document.getElementById('tabBtnAnalytics');
@@ -2786,6 +2833,7 @@ function renderTodoBanner(){
 
 async function init(){
   await showNativeStorageInfo();
+  await setupMobilePublishUI();
   await setupAnalyticsUI();
   listings = await loadKey('listings');
   orders = await loadKey('orders');
