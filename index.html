@@ -210,6 +210,13 @@
       <label class="field" style="display:block;font-size:12px;color:var(--gold);margin-bottom:4px;">商品頁優惠公告（顯示在公開商品頁最上方，只有你能編輯；改完按「發布商品頁」才會更新）</label>
       <textarea id="shopPromoInput" placeholder="例如：本週優惠 買三片折 NT$50！面交可再議～" style="width:100%;min-height:52px;background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;resize:vertical;"></textarea>
     </div>
+    <div id="trackRow" style="display:none;margin-top:12px;">
+      <label class="field" style="display:block;font-size:12px;color:var(--teal);margin-bottom:4px;">訪客追蹤設定（Google Apps Script 網址與密鑰；設定後發布商品頁即開始記錄訪客，可到「數據分析」分頁看統計）</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <input type="text" id="trackUrlInput" placeholder="Apps Script 網頁應用程式 URL（.../exec）" style="flex:1;min-width:260px;background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;">
+        <input type="text" id="trackKeyInput" placeholder="讀取密鑰（STATS_KEY）" style="width:200px;background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;">
+      </div>
+    </div>
     <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
       <button class="secondary" id="backupBtn">備份資料</button>
       <button class="ghost" id="restoreBtn">還原備份（覆蓋）</button>
@@ -229,6 +236,7 @@
     <button class="tab-btn" data-tab="listings">上架清單 <span class="badge" id="tabBadgeListings">0</span></button>
     <button class="tab-btn" data-tab="orders">進行中訂單 <span class="badge" id="tabBadgeOrders">0</span></button>
     <button class="tab-btn" data-tab="archive">封存與報表 <span class="badge" id="tabBadgeArchive">0</span></button>
+    <button class="tab-btn" data-tab="analytics" id="tabBtnAnalytics" style="display:none;">數據分析</button>
   </nav>
 
   <!-- ===================== COMPOSER TAB ===================== -->
@@ -556,8 +564,42 @@
     </div>
   </section>
 
+  <!-- ===================== ANALYTICS TAB ===================== -->
+  <section class="tab-panel" id="tab-analytics">
+    <div class="panel-card">
+      <div class="row-between">
+        <h2>數據分析 <span class="muted-small" id="anaUpdated"></span></h2>
+        <button class="primary" id="refreshAnaBtn">重新整理</button>
+      </div>
+      <div id="anaNotConfigured" class="note-banner" style="display:none;">尚未設定訪客追蹤。請先在最上方「訪客追蹤設定」填入 Apps Script 網址與密鑰，並發布商品頁。</div>
+      <div id="anaError" class="note-banner" style="display:none;color:var(--danger);border-color:var(--danger-deep);"></div>
+      <div id="anaBody" style="display:none;">
+        <div class="stat-row">
+          <div class="stat-box"><div class="label">總造訪</div><div class="value" id="anaTotal">0</div></div>
+          <div class="stat-box"><div class="label">今日</div><div class="value" id="anaToday">0</div></div>
+          <div class="stat-box"><div class="label">近 30 天</div><div class="value" id="anaWindow">0</div></div>
+        </div>
+        <div id="anaDaily" style="margin:6px 0 18px;"></div>
+        <div class="report-breakdown">
+          <div class="breakdown-box"><h3>流量來源</h3><div id="anaSource"></div></div>
+          <div class="breakdown-box"><h3>裝置</h3><div id="anaDevice"></div></div>
+          <div class="breakdown-box"><h3>瀏覽器</h3><div id="anaBrowser"></div></div>
+          <div class="breakdown-box"><h3>熱門搜尋</h3><div id="anaSearch"></div></div>
+        </div>
+        <h2 style="margin-top:8px;">近期造訪</h2>
+        <div class="table-scroll">
+          <table class="archive-table" id="anaRecentTable" style="min-width:720px;">
+            <thead><tr><th>時間</th><th>類型</th><th>來源</th><th>搜尋</th><th>螢幕</th><th>語言</th></tr></thead>
+            <tbody id="anaRecentBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
 </div>
 
+<script src="analytics.js"></script>
 <script>
 // ---------------------------------------------------------------
 // Constants
@@ -2458,8 +2500,9 @@ if(publishShopBtnEl) publishShopBtnEl.addEventListener('click', async ()=>{
     const promo = promoEl ? promoEl.value.trim() : '';
     const introEl = document.getElementById('shopIntroInput');
     const intro = introEl ? introEl.value.trim() : '';
+    const trackUrl = await loadShopTrackUrl();
     const res = await window.cdshopNative.publishShop({
-      generatedAt: new Date().toISOString(), items, images, promo, intro
+      generatedAt: new Date().toISOString(), items, images, promo, intro, trackUrl
     });
     if(res && res.ok){
       hint.textContent = `已發布 ${res.count} 件商品`;
@@ -2536,6 +2579,80 @@ async function loadShopIntro(){
   return (Array.isArray(a) && a[0]) ? String(a[0]) : '';
 }
 async function saveShopIntro(text){ await saveKey('shopIntro', [text || '']); }
+
+// 訪客追蹤設定（Apps Script URL 與讀取密鑰）
+async function loadShopTrackUrl(){ const a = await loadKey('shopTrackUrl'); return (Array.isArray(a) && a[0]) ? String(a[0]) : ''; }
+async function saveShopTrackUrl(v){ await saveKey('shopTrackUrl', [v || '']); }
+async function loadShopStatsKey(){ const a = await loadKey('shopStatsKey'); return (Array.isArray(a) && a[0]) ? String(a[0]) : ''; }
+async function saveShopStatsKey(v){ await saveKey('shopStatsKey', [v || '']); }
+
+/* ================================================================
+   ANALYTICS TAB（數據分析儀表板）— 用 textContent 建構，避免訪客資料 XSS
+================================================================ */
+function anaBar(elId, arr){
+  const el = document.getElementById(elId); el.innerHTML='';
+  if(!arr || !arr.length){ el.innerHTML='<div class="muted-small">無資料</div>'; return; }
+  arr.slice(0,8).forEach(row=>{
+    const r=document.createElement('div'); r.className='breakdown-row';
+    const a=document.createElement('span'); a.textContent = row.key;
+    const b=document.createElement('span'); b.textContent = row.count;
+    r.appendChild(a); r.appendChild(b); el.appendChild(r);
+  });
+}
+function anaDaily(series){
+  const el=document.getElementById('anaDaily'); el.innerHTML='';
+  if(!series || !series.length) return;
+  const max=Math.max(1, ...series.map(s=>s.count));
+  const wrap=document.createElement('div'); wrap.style.cssText='display:flex;align-items:flex-end;gap:2px;height:78px;';
+  series.forEach(s=>{
+    const bar=document.createElement('div');
+    bar.title = s.day+'：'+s.count+' 次';
+    bar.style.cssText='flex:1;background:var(--teal);opacity:.7;border-radius:2px 2px 0 0;height:'+Math.round(s.count/max*100)+'%;min-height:'+(s.count?3:1)+'px;';
+    wrap.appendChild(bar);
+  });
+  el.appendChild(wrap);
+  const lbl=document.createElement('div'); lbl.className='muted-small'; lbl.style.marginTop='4px';
+  lbl.textContent = series[0].day+' ～ '+series[series.length-1].day+'（每日造訪）';
+  el.appendChild(lbl);
+}
+function anaRecent(recent){
+  const tb=document.getElementById('anaRecentBody'); tb.innerHTML='';
+  if(!recent || !recent.length){ const tr=document.createElement('tr'); tr.className='empty-row'; tr.innerHTML='<td colspan="6">尚無造訪紀錄</td>'; tb.appendChild(tr); return; }
+  recent.forEach(e=>{
+    const tr=document.createElement('tr');
+    let tm=''; try{ tm=new Date(e.t).toLocaleString('zh-TW',{hour12:false}); }catch(_){ tm=String(e.t||''); }
+    [tm, (e.ev==='search'?'搜尋':'造訪'), e.src||'—', e.q||'—', e.scr||'—', e.lang||'—'].forEach(v=>{
+      const td=document.createElement('td'); td.textContent = v; tr.appendChild(td);
+    });
+    tb.appendChild(tr);
+  });
+}
+let _anaLoading=false;
+async function loadAnalytics(){
+  if(!hasNative || !window.cdshopNative.fetchAnalytics) return;
+  const nc=document.getElementById('anaNotConfigured'), err=document.getElementById('anaError'), body=document.getElementById('anaBody');
+  const url = await loadShopTrackUrl(), key = await loadShopStatsKey();
+  nc.style.display='none'; err.style.display='none';
+  if(!url){ nc.style.display='block'; body.style.display='none'; document.getElementById('anaUpdated').textContent=''; return; }
+  if(_anaLoading) return; _anaLoading=true;
+  document.getElementById('anaUpdated').textContent='讀取中…';
+  try{
+    const res = await window.cdshopNative.fetchAnalytics(url, key);
+    if(!res || res.error){ err.textContent = (res && res.error) || '讀取失敗'; err.style.display='block'; body.style.display='none'; document.getElementById('anaUpdated').textContent=''; return; }
+    const stats = CDAnalytics.aggregateEvents(res.events, 30);
+    document.getElementById('anaTotal').textContent = stats.total;
+    document.getElementById('anaToday').textContent = stats.todayCount;
+    document.getElementById('anaWindow').textContent = stats.windowTotal;
+    anaBar('anaSource', stats.bySource); anaBar('anaDevice', stats.byDevice);
+    anaBar('anaBrowser', stats.byBrowser); anaBar('anaSearch', stats.searches);
+    anaDaily(stats.series); anaRecent(stats.recent);
+    body.style.display='block';
+    document.getElementById('anaUpdated').textContent = '更新於 ' + new Date().toLocaleTimeString('zh-TW',{hour12:false});
+  }catch(e){ err.textContent='讀取失敗：'+(e&&e.message||e); err.style.display='block'; }
+  finally{ _anaLoading=false; }
+}
+document.getElementById('refreshAnaBtn').addEventListener('click', loadAnalytics);
+document.getElementById('tabBtnAnalytics').addEventListener('click', ()=> loadAnalytics());
 // 首次使用時預填的範例（使用者可直接改成自己的帳號再發布）
 const EXAMPLE_INTRO = [
   '👋 歡迎光臨我的 CD 出清小舖！',
@@ -2566,6 +2683,8 @@ async function showNativeStorageInfo(){
     revealBtn.addEventListener('click', ()=> window.cdshopNative.reveal());
     const publishBtn = document.getElementById('publishShopBtn');
     if(publishBtn) publishBtn.style.display = 'inline-block';
+    const anaTabBtn = document.getElementById('tabBtnAnalytics');
+    if(anaTabBtn) anaTabBtn.style.display = '';
     // 商品頁最上方介紹：只有桌面後台能編輯；沒設過就預填範例讓你直接改
     const introRow = document.getElementById('introRow');
     const introInput = document.getElementById('shopIntroInput');
@@ -2582,6 +2701,17 @@ async function showNativeStorageInfo(){
       promoRow.style.display = 'block';
       promoInput.value = await loadShopPromo();
       promoInput.addEventListener('change', ()=> saveShopPromo(promoInput.value.trim()));
+    }
+    // 訪客追蹤設定
+    const trackRow = document.getElementById('trackRow');
+    const trackUrlInput = document.getElementById('trackUrlInput');
+    const trackKeyInput = document.getElementById('trackKeyInput');
+    if(trackRow && trackUrlInput && trackKeyInput){
+      trackRow.style.display = 'block';
+      trackUrlInput.value = await loadShopTrackUrl();
+      trackKeyInput.value = await loadShopStatsKey();
+      trackUrlInput.addEventListener('change', ()=> saveShopTrackUrl(trackUrlInput.value.trim()));
+      trackKeyInput.addEventListener('change', ()=> saveShopStatsKey(trackKeyInput.value.trim()));
     }
     if(info.fellBack){
       const warn = document.getElementById('nativeWarnRow');
