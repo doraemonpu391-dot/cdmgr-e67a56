@@ -1552,6 +1552,8 @@ function getFilteredListings(){
   const fSource = document.getElementById('filterSource').value;
   const fGenre = document.getElementById('filterGenre').value;
   return listings.filter(l=>{
+    // 已完成訂單（封存）的商品從上架清單隱藏，避免賣完的商品一直卡著
+    if(l.archived) return false;
     if(q && !((l.artist||'').toLowerCase().includes(q) || (l.album||'').toLowerCase().includes(q))) return false;
     if(fStatus && l.status !== fStatus) return false;
     if(fPlatform === '__none__'){ if(l.platforms && l.platforms.length) return false; }
@@ -1769,8 +1771,8 @@ function renderListings(){
 function updateListingStats(){
   const active = listings.filter(l => l.status === '在售');
   const reserved = listings.filter(l => l.status === '保留中');
-  // 商品總值：涵蓋所有商品（不分狀態）
-  const totalValue = listings.reduce((sum,l)=> sum + (parseFloat(l.price)||0), 0);
+  // 商品總值：涵蓋所有未封存商品（不分狀態；已完成訂單的商品不列入）
+  const totalValue = listings.filter(l=>!l.archived).reduce((sum,l)=> sum + (parseFloat(l.price)||0), 0);
   document.getElementById('statActiveListings').textContent = active.length;
   document.getElementById('statReservedCount').textContent = reserved.length;
   document.getElementById('statTotalValue').textContent = fmtMoney(totalValue);
@@ -2121,12 +2123,14 @@ function renderOrders(){
     const actionsWrap = document.createElement('div'); actionsWrap.className = 'actions-cell';
     const completeBtn = document.createElement('button'); completeBtn.className = 'secondary'; completeBtn.textContent = '完成訂單';
     completeBtn.addEventListener('click', async ()=>{
-      if(!(await uiConfirm('確定要將此訂單標記為完成並移至封存嗎？'))) return;
+      if(!(await uiConfirm('確定要將此訂單標記為完成並移至封存嗎？完成後，訂單內的商品會從上架清單隱藏。'))) return;
       order.completedDate = todayStr();
       archive.push(order);
       orders = orders.filter(o => o.id !== order.id);
+      const listingsChanged = setListingsArchived(order, true);
       await saveKey('orders', orders); await saveKey('archive', archive);
-      renderOrders(); renderArchive();
+      if(listingsChanged) await saveKey('listings', listings);
+      renderOrders(); renderArchive(); renderListings();
     });
     const delBtn = document.createElement('button'); delBtn.className = 'danger-ghost'; delBtn.textContent = '刪除';
     delBtn.addEventListener('click', async ()=>{
@@ -2158,6 +2162,18 @@ function updateOrderStats(){
 /* ================================================================
    ARCHIVE TAB
 ================================================================ */
+// 依訂單快照的商品 id，把對應上架商品標記為已封存（true=完成訂單時隱藏／false=還原時重新顯示）。
+// 回傳是否有任何 listing 被改動（供決定是否需要存檔）。
+function setListingsArchived(order, archived){
+  const ids = new Set((order && order.items || []).map(it => it.id).filter(Boolean));
+  if(ids.size === 0) return false;
+  let changed = false;
+  listings.forEach(l=>{
+    if(ids.has(l.id) && !!l.archived !== archived){ l.archived = archived; changed = true; }
+  });
+  return changed;
+}
+
 function renderArchive(){
   const tbody = document.getElementById('archiveBody'); tbody.innerHTML = '';
   if(archive.length === 0){
@@ -2175,12 +2191,14 @@ function renderArchive(){
     const tdActions = document.createElement('td');
     const restoreBtn = document.createElement('button'); restoreBtn.className = 'ghost'; restoreBtn.textContent = '還原至進行中';
     restoreBtn.addEventListener('click', async ()=>{
-      if(!(await uiConfirm('確定要將此訂單還原到進行中訂單嗎？'))) return;
+      if(!(await uiConfirm('確定要將此訂單還原到進行中訂單嗎？還原後，商品會重新顯示在上架清單。'))) return;
       archive = archive.filter(o => o.id !== order.id);
       delete order.completedDate;
       orders.push(order);
+      const listingsChanged = setListingsArchived(order, false);
       await saveKey('archive', archive); await saveKey('orders', orders);
-      renderArchive(); renderOrders();
+      if(listingsChanged) await saveKey('listings', listings);
+      renderArchive(); renderOrders(); renderListings();
     });
     tdActions.appendChild(restoreBtn); tr.appendChild(tdActions);
     tbody.appendChild(tr);
@@ -2862,6 +2880,13 @@ async function init(){
       if(!!l.hasImage !== has){ l.hasImage = has; changed = true; }
     });
     if(changed) await saveKey('listings', listings);
+  }catch(e){}
+
+  // 對帳：已封存訂單（完成的）內的商品應從上架清單隱藏。處理本功能上線前就已完成的舊訂單。
+  try{
+    let archChanged = false;
+    archive.forEach(o=>{ if(setListingsArchived(o, true)) archChanged = true; });
+    if(archChanged) await saveKey('listings', listings);
   }catch(e){}
 
   renderListings(); renderOrders(); renderArchive();
