@@ -2304,7 +2304,10 @@ function renderBreakdown(elId, map){
   if(keys.length === 0){ el.innerHTML = '<div class="muted-small">無資料</div>'; return; }
   keys.forEach(k=>{
     const row = document.createElement('div'); row.className = 'breakdown-row';
-    row.innerHTML = `<span>${k}</span><span>${fmtMoney(map[k])}</span>`;
+    // textContent 防 XSS：k 可能是貨源/買家等使用者輸入或同步資料
+    const kSpan = document.createElement('span'); kSpan.textContent = k;
+    const vSpan = document.createElement('span'); vSpan.textContent = fmtMoney(map[k]);
+    row.appendChild(kSpan); row.appendChild(vSpan);
     el.appendChild(row);
   });
 }
@@ -2841,17 +2844,21 @@ function renderTodoBanner(){
   const unpaid = orders.filter(o => o.paymentStatus === '未付款');
 
   const lines = [];
+  // name 部分是使用者輸入/同步資料，一律走 textContent（append 字串＝文字節點），不進 innerHTML
   const nameList = arr => arr.slice(0,3).map(l=>formatName(l.artist,l.album)).join('、') + (arr.length>3 ? ` 等 ${arr.length} 筆` : '');
-  if(endedUnhandled.length) lines.push({tab:'listings', html:`🔔 <b style="color:var(--gold);">${endedUnhandled.length} 筆競標已截標待處理</b>：${nameList(endedUnhandled)}`});
-  if(endingToday.length) lines.push({tab:'listings', html:`⏰ 今日截標 ${endingToday.length} 筆：${nameList(endingToday)}`});
-  if(pendingShip.length) lines.push({tab:'orders', html:`📦 待出貨訂單 ${pendingShip.length} 筆`});
-  if(unpaid.length) lines.push({tab:'orders', html:`💰 未付款訂單 ${unpaid.length} 筆`});
+  if(endedUnhandled.length) lines.push({tab:'listings', emoji:'🔔', bold:`${endedUnhandled.length} 筆競標已截標待處理`, boldColor:'var(--gold)', tail:'：'+nameList(endedUnhandled)});
+  if(endingToday.length) lines.push({tab:'listings', emoji:'⏰', tail:`今日截標 ${endingToday.length} 筆：${nameList(endingToday)}`});
+  if(pendingShip.length) lines.push({tab:'orders', emoji:'📦', tail:`待出貨訂單 ${pendingShip.length} 筆`});
+  if(unpaid.length) lines.push({tab:'orders', emoji:'💰', tail:`未付款訂單 ${unpaid.length} 筆`});
 
-  if(lines.length === 0){ el.style.display = 'none'; el.innerHTML = ''; return; }
-  el.innerHTML = '<b style="color:var(--teal);">今日待辦</b>';
+  if(lines.length === 0){ el.style.display = 'none'; el.textContent = ''; return; }
+  el.textContent = '';
+  const hdr = document.createElement('b'); hdr.style.color = 'var(--teal)'; hdr.textContent = '今日待辦'; el.appendChild(hdr);
   lines.forEach(ln=>{
     const row = document.createElement('div');
-    row.innerHTML = ln.html;
+    if(ln.emoji) row.append(ln.emoji + ' ');
+    if(ln.bold){ const b = document.createElement('b'); if(ln.boldColor) b.style.color = ln.boldColor; b.textContent = ln.bold; row.appendChild(b); }
+    if(ln.tail) row.append(ln.tail);
     row.style.cursor = 'pointer';
     row.title = '點擊前往';
     row.addEventListener('click', ()=> switchTab(ln.tab));
