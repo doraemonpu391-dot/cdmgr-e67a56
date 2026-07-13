@@ -1737,6 +1737,19 @@ function renderListings(){
     nameText.textContent = formatName(item.artist, item.album);
     nameWrap.appendChild(thumb); nameWrap.appendChild(nameText);
     tdName.appendChild(nameWrap);
+    // 保留中商品：私密「保留給」備註（僅後台可見，絕不進公開商品頁）
+    if(item.status === '保留中'){
+      const resWrap = document.createElement('div');
+      resWrap.style.cssText = 'margin-top:5px;display:flex;align-items:center;gap:5px;';
+      const lock = document.createElement('span'); lock.textContent = '🔒 保留給'; lock.style.cssText = 'font-size:11px;color:var(--gold);white-space:nowrap;';
+      const resInput = document.createElement('input'); resInput.type = 'text';
+      resInput.value = item.reservedFor || ''; resInput.placeholder = '(僅自己可見)';
+      resInput.className = 'cell-input'; resInput.style.cssText = 'font-size:12px;max-width:160px;';
+      resInput.title = '保留對象備註，不會顯示在公開商品頁';
+      resInput.addEventListener('change', async ()=>{ item.reservedFor = resInput.value.trim(); await saveKey('listings', listings); });
+      resWrap.appendChild(lock); resWrap.appendChild(resInput);
+      tdName.appendChild(resWrap);
+    }
     tr.appendChild(tdName);
 
     // Price cell — editable inline once an auction has ended
@@ -1797,7 +1810,7 @@ function renderListings(){
     const tdStatus = document.createElement('td');
     const statusSel = document.createElement('select'); statusSel.className = 'status-select';
     LISTING_STATUSES.forEach(s => statusSel.appendChild(optionEl(s, s, item.status)));
-    statusSel.addEventListener('change', async ()=>{ item.status = statusSel.value; await saveKey('listings', listings); updateListingStats(); });
+    statusSel.addEventListener('change', async ()=>{ item.status = statusSel.value; await saveKey('listings', listings); updateListingStats(); renderListings(); });
     tdStatus.appendChild(statusSel); tr.appendChild(tdStatus);
 
     const tdActions = document.createElement('td');
