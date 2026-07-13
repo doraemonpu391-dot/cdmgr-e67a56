@@ -210,6 +210,16 @@
       <label class="field" style="display:block;font-size:12px;color:var(--gold);margin-bottom:4px;">商品頁優惠公告（顯示在公開商品頁最上方，只有你能編輯；改完按「發布商品頁」才會更新）</label>
       <textarea id="shopPromoInput" placeholder="例如：本週優惠 買三片折 NT$50！面交可再議～" style="width:100%;min-height:52px;background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;resize:vertical;"></textarea>
     </div>
+    <div id="socialsRow" style="display:none;margin-top:12px;">
+      <label class="field" style="display:block;font-size:12px;color:var(--teal);margin-bottom:4px;">社群連結（填網址，商品頁最上方會顯示可點的社群<b>圖示</b>——不用把長網址貼進介紹文字。空白則不顯示該圖示；改完按「發布商品頁」才更新）</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <input type="text" id="socialFbInput" placeholder="Facebook 網址 https://facebook.com/…" style="background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;">
+        <input type="text" id="socialIgInput" placeholder="Instagram 網址 https://instagram.com/…" style="background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;">
+        <input type="text" id="socialThreadsInput" placeholder="Threads 網址 https://threads.net/@…" style="background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;">
+        <input type="text" id="socialLineInput" placeholder="LINE 連結 https://line.me/… 或 https://lin.ee/…" style="background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;">
+        <input type="text" id="socialWebInput" placeholder="其他網站 https://…" style="background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;">
+      </div>
+    </div>
     <div id="ghRow" style="display:none;margin-top:12px;">
       <label class="field" style="display:block;font-size:12px;color:var(--gold);margin-bottom:4px;">手機發布用 GitHub Token（fine-grained，只給 <b>cd-shop-manager</b> 這個 repo 的 Contents 讀寫權限）。設定後手機也能按「發布商品頁」。</label>
       <input type="password" id="ghTokenInput" placeholder="github_pat_..." autocomplete="off" style="width:100%;background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;">
@@ -2666,7 +2676,8 @@ async function buildPublishPayload(){
     intro = await loadShopIntro();
   }
   const trackUrl = await loadShopTrackUrl();
-  return { generatedAt: new Date().toISOString(), items, images, promo, intro, trackUrl };
+  const socials = hasNative ? readSocialsFromInputs() : await loadShopSocials();
+  return { generatedAt: new Date().toISOString(), items, images, promo, intro, trackUrl, socials };
 }
 async function sha1HexBrowser(bytes){
   const buf = await crypto.subtle.digest('SHA-1', bytes);
@@ -2678,7 +2689,7 @@ async function publishViaGitHub(payload, hint){
   if(!token){ await uiAlert('請先在上方填入 GitHub Token（fine-grained，只給 cd-shop-manager 這個 repo 的 Contents 讀寫權限）。'); return null; }
   const catalogJson = JSON.stringify({
     generatedAt: payload.generatedAt, items: payload.items,
-    promo: payload.promo, intro: payload.intro, trackUrl: payload.trackUrl
+    promo: payload.promo, intro: payload.intro, trackUrl: payload.trackUrl, socials: payload.socials
   }, null, 2);
   return await CDGitHubPublish.publishShopToGitHub({
     token, owner: GH_OWNER, repo: GH_REPO, branch: GH_BRANCH,
@@ -2774,6 +2785,13 @@ async function loadShopIntro(){
   return (Array.isArray(a) && a[0]) ? String(a[0]) : '';
 }
 async function saveShopIntro(text){ await saveKey('shopIntro', [text || '']); }
+
+// 社群連結（商品頁顯示為可點圖示）
+const SOCIAL_FIELDS = { facebook:'socialFbInput', instagram:'socialIgInput', threads:'socialThreadsInput', line:'socialLineInput', website:'socialWebInput' };
+async function loadShopSocials(){ const a = await loadKey('shopSocials'); return (Array.isArray(a) && a[0] && typeof a[0] === 'object') ? a[0] : {}; }
+async function saveShopSocials(obj){ await saveKey('shopSocials', [obj || {}]); }
+function readSocialsFromInputs(){ const o = {}; Object.keys(SOCIAL_FIELDS).forEach(k=>{ const el = document.getElementById(SOCIAL_FIELDS[k]); const v = el ? el.value.trim() : ''; if(v) o[k] = v; }); return o; }
+async function saveSocialsFromInputs(){ await saveShopSocials(readSocialsFromInputs()); }
 
 // 訪客追蹤設定（Apps Script URL 與讀取密鑰）
 async function loadShopTrackUrl(){ const a = await loadKey('shopTrackUrl'); return (Array.isArray(a) && a[0]) ? String(a[0]) : ''; }
@@ -2950,6 +2968,16 @@ async function showNativeStorageInfo(){
       promoRow.style.display = 'block';
       promoInput.value = await loadShopPromo();
       promoInput.addEventListener('change', ()=> saveShopPromo(promoInput.value.trim()));
+    }
+    // 社群連結：載入既有值、變更即存
+    const socialsRow = document.getElementById('socialsRow');
+    if(socialsRow){
+      socialsRow.style.display = 'block';
+      const saved = await loadShopSocials();
+      Object.keys(SOCIAL_FIELDS).forEach(k=>{
+        const el = document.getElementById(SOCIAL_FIELDS[k]);
+        if(el){ el.value = saved[k] || ''; el.addEventListener('change', saveSocialsFromInputs); }
+      });
     }
     if(info.fellBack){
       const warn = document.getElementById('nativeWarnRow');
