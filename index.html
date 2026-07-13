@@ -334,8 +334,13 @@
         <div><label class="field">標價（NT$）</label><input type="number" id="lstPrice" min="0"></div>
         <div><label class="field">成本（NT$）</label><input type="number" id="lstCost" min="0"></div>
         <div><label class="field">貨源</label><input type="text" id="lstSource" placeholder="例如：光華商場"></div>
-        <div><label class="field">曲風</label><input type="text" id="lstGenre" placeholder="例如：Pop"></div>
-        <div><label class="field">備注</label><input type="text" id="lstNotes" placeholder="例如：附側標、near mint"></div>
+        <datalist id="regionOptions"></datalist>
+        <datalist id="genreOptions"></datalist>
+        <datalist id="subOptions"></datalist>
+        <div><label class="field">地區/語言</label><input type="text" id="lstRegion" list="regionOptions" placeholder="可多個，逗號分隔"></div>
+        <div><label class="field">大類 Genre</label><input type="text" id="lstGenre" list="genreOptions" placeholder="可多個，逗號分隔"></div>
+        <div><label class="field">子曲風 Sub-genre</label><input type="text" id="lstSub" list="subOptions" placeholder="可多個，逗號分隔"></div>
+        <div><label class="field">備注</label><input type="text" id="lstNotes" placeholder="例如：near mint"></div>
         <div class="platform-checks">
           <label><input type="checkbox" class="platform-check" value="Facebook Marketplace"> Facebook Marketplace</label>
           <label><input type="checkbox" class="platform-check" value="Yahoo拍賣"> Yahoo拍賣</label>
@@ -418,7 +423,9 @@
           <div><label class="field">標價（NT$）</label><input type="number" id="edtPrice" min="0"></div>
           <div><label class="field">成本（NT$）</label><input type="number" id="edtCost" min="0"></div>
           <div><label class="field">貨源</label><input type="text" id="edtSource"></div>
-          <div><label class="field">曲風</label><input type="text" id="edtGenre"></div>
+          <div><label class="field">地區/語言</label><input type="text" id="edtRegion" list="regionOptions" placeholder="可多個，逗號分隔"></div>
+          <div><label class="field">大類 Genre</label><input type="text" id="edtGenre" list="genreOptions" placeholder="可多個，逗號分隔"></div>
+          <div><label class="field">子曲風 Sub-genre</label><input type="text" id="edtSub" list="subOptions" placeholder="可多個，逗號分隔"></div>
           <div><label class="field">備注</label><input type="text" id="edtNotes"></div>
           <div class="platform-checks" style="grid-column:1/-1;">
             <label style="font-weight:700;color:var(--gold);"><input type="checkbox" id="edtPlatformsEnable"> 修改上架平台：</label>
@@ -617,6 +624,50 @@ const SHIP_STATUSES = ['待出貨', '已出貨', '問題件'];
 const PAYMENT_STATUSES = ['未付款', '已付款'];
 const LISTING_STATUSES = ['在售', '保留中', '已售出', '已下架'];
 const BID_TYPES = ['競標', '直購'];
+
+// 三軸曲風分類（Discogs 式）：地區/語言、大類 Genre、子曲風 Sub-genre。皆受控清單可自訂複選。
+const REGION_OPTIONS = ['華語', '台語', '粵語', '西洋', '日本', '韓國', '其他'];
+const GENRE_OPTIONS  = ['流行', '搖滾', '電子', '嘻哈/R&B', '爵士', '古典', '民謠/鄉村', '原聲帶', '演歌/傳統', '其他'];
+// 把「逗號/頓號分隔字串」解析成去重標籤陣列；反向則用頓號串起。
+function parseTags(s){
+  return String(s==null?'':s).split(/[,、，]/).map(function(x){return x.trim();})
+    .filter(Boolean).filter(function(v,i,a){ return a.indexOf(v)===i; });
+}
+function tagsToStr(arr){ return Array.isArray(arr) ? arr.join('、') : ''; }
+// 一次性、冪等、非破壞遷移：確保每筆有 regions/genres/subgenres 陣列；
+// 舊單一 genre 字串搬進 subgenres（保留原 genre 欄不刪）。回傳是否有改動。
+function migrateTaxonomy(list){
+  if(!Array.isArray(list)) return false;
+  var changed = false;
+  list.forEach(function(l){
+    if(!l || typeof l !== 'object') return;
+    if(!Array.isArray(l.regions)){ l.regions = []; changed = true; }
+    if(!Array.isArray(l.genres)){ l.genres = []; changed = true; }
+    if(!Array.isArray(l.subgenres)){
+      var g = (l.genre==null) ? '' : String(l.genre).trim();
+      l.subgenres = g ? [g] : [];
+      changed = true;
+    }
+  });
+  return changed;
+}
+// 填三軸 datalist 建議：地區/大類用受控常數，子曲風用既有資料的既有值。
+function refreshTaxonomyDatalists(){
+  var subSet = {};
+  listings.forEach(function(l){ (l.subgenres||[]).forEach(function(s){ if(s) subSet[s]=1; }); });
+  var fill = function(id, arr){
+    var dl = document.getElementById(id); if(!dl) return;
+    dl.innerHTML = '';
+    arr.forEach(function(v){ var o=document.createElement('option'); o.value=v; dl.appendChild(o); });
+  };
+  fill('regionOptions', REGION_OPTIONS);
+  fill('genreOptions', GENRE_OPTIONS);
+  fill('subOptions', Object.keys(subSet).sort(function(a,b){ return a.localeCompare(b,'zh-Hant'); }));
+}
+// 上架清單表格顯示用：三軸合併成一段文字。
+function listingTaxonomyText(l){
+  return [].concat(l.regions||[], l.genres||[], l.subgenres||[]).filter(Boolean).join('、');
+}
 
 const composerState = Array.from({length: SLOTS}, () => ({
   imgSrc:null, artist:'', album:'', price:'', notes:'', genre:'', cost:'', source:'',
@@ -1455,7 +1506,9 @@ document.getElementById('addListingBtn').addEventListener('click', async ()=>{
   const price = document.getElementById('lstPrice').value;
   const cost = document.getElementById('lstCost').value;
   const source = document.getElementById('lstSource').value.trim();
-  const genre = document.getElementById('lstGenre').value.trim();
+  const regions = parseTags(document.getElementById('lstRegion').value);
+  const genres = parseTags(document.getElementById('lstGenre').value);
+  const subgenres = parseTags(document.getElementById('lstSub').value);
   const notes = document.getElementById('lstNotes').value.trim();
   const platforms = Array.from(document.querySelectorAll('.platform-check:checked')).map(cb=>cb.value);
   const bidTypeEl = document.querySelector('input[name="lstBidType"]:checked');
@@ -1466,13 +1519,15 @@ document.getElementById('addListingBtn').addEventListener('click', async ()=>{
   if(!artist && !album){ await uiAlert('請至少輸入藝人或專輯名稱'); return; }
 
   listings.push({
-    id: genId(), artist, album, price, cost, source, genre, notes, platforms,
+    id: genId(), artist, album, price, cost, source, notes, platforms,
+    regions, genres, subgenres,
     biddingType, auctionEnd, sideLabel,
     status: '在售', dateAdded: todayStr()
   });
   await saveKey('listings', listings);
+  refreshTaxonomyDatalists();
 
-  ['lstArtist','lstAlbum','lstPrice','lstCost','lstSource','lstGenre','lstNotes','lstAuctionEnd'].forEach(id=> document.getElementById(id).value = '');
+  ['lstArtist','lstAlbum','lstPrice','lstCost','lstSource','lstRegion','lstGenre','lstSub','lstNotes','lstAuctionEnd'].forEach(id=> document.getElementById(id).value = '');
   document.querySelectorAll('.platform-check').forEach(cb=>cb.checked=false);
   document.querySelectorAll('input[name="lstBidType"]').forEach(r=>r.checked=false);
   document.getElementById('lstSideLabel').checked = false;
@@ -1498,7 +1553,10 @@ function parseListingFormText(text){
     const id = genId();
     results.push({
       id, artist: obj['藝人']||'', album: obj['專輯']||'', price: obj['標價']||'',
-      cost: obj['成本']||'', source: obj['貨源']||'', genre: obj['曲風']||'', notes: obj['備注']||'',
+      cost: obj['成本']||'', source: obj['貨源']||'', notes: obj['備注']||'',
+      regions: parseTags(obj['地區']||obj['地區/語言']||''),
+      genres: parseTags(obj['大類']||obj['Genre']||''),
+      subgenres: parseTags(obj['子曲風']||obj['曲風']||''),
       sideLabel: obj['側標']==='是',
       biddingType: BID_TYPES.includes(obj['類型']) ? obj['類型'] : '',
       auctionEnd: obj['截標時間']||'',
@@ -1559,22 +1617,32 @@ function getFilteredListings(){
     if(fPlatform === '__none__'){ if(l.platforms && l.platforms.length) return false; }
     else if(fPlatform && !(l.platforms||[]).includes(fPlatform)) return false;
     if(fSource && (l.source||'') !== fSource) return false;
-    if(fGenre && (l.genre||'') !== fGenre) return false;
+    // 曲風篩選：跨三軸（地區/大類/子曲風）任一命中即算
+    if(fGenre && [].concat(l.regions||[], l.genres||[], l.subgenres||[]).indexOf(fGenre) === -1) return false;
     return true;
   });
 }
 
 // Rebuild 貨源/曲風 options from current data, keeping the active selection
 function refreshFilterOptions(){
-  [['filterSource','source','貨源'],['filterGenre','genre','曲風']].forEach(([selId, field, label])=>{
-    const sel = document.getElementById(selId);
-    const current = sel.value;
-    const values = Array.from(new Set(listings.map(l=>(l[field]||'').trim()).filter(Boolean))).sort();
-    sel.innerHTML = '';
-    sel.appendChild(optionEl('', `${label}：全部`));
+  // 貨源：單一字串欄
+  (function(){
+    const sel = document.getElementById('filterSource'); const current = sel.value;
+    const values = Array.from(new Set(listings.map(l=>(l.source||'').trim()).filter(Boolean))).sort();
+    sel.innerHTML = ''; sel.appendChild(optionEl('', '貨源：全部'));
     values.forEach(v=> sel.appendChild(optionEl(v, v, current)));
     if(values.includes(current)) sel.value = current;
-  });
+  })();
+  // 曲風：三軸值聯集
+  (function(){
+    const sel = document.getElementById('filterGenre'); const current = sel.value;
+    const set = {};
+    listings.forEach(l=>{ [].concat(l.regions||[], l.genres||[], l.subgenres||[]).forEach(v=>{ v=(v||'').trim(); if(v) set[v]=1; }); });
+    const values = Object.keys(set).sort();
+    sel.innerHTML = ''; sel.appendChild(optionEl('', '曲風：全部'));
+    values.forEach(v=> sel.appendChild(optionEl(v, v, current)));
+    if(values.includes(current)) sel.value = current;
+  })();
   const anyActive = ['filterStatus','filterPlatform','filterSource','filterGenre'].some(id=>document.getElementById(id).value)
     || document.getElementById('listingSearch').value.trim() !== '';
   document.getElementById('clearFiltersBtn').style.display = anyActive ? 'inline-block' : 'none';
@@ -1690,7 +1758,7 @@ function renderListings(){
 
     const tdCost = document.createElement('td'); tdCost.textContent = item.cost ? fmtMoney(item.cost) : '—'; tr.appendChild(tdCost);
     const tdSource = document.createElement('td'); tdSource.textContent = item.source || '—'; tr.appendChild(tdSource);
-    const tdGenre = document.createElement('td'); tdGenre.textContent = item.genre || '—'; tr.appendChild(tdGenre);
+    const tdGenre = document.createElement('td'); tdGenre.textContent = listingTaxonomyText(item) || '—'; tr.appendChild(tdGenre);
     const tdNotes = document.createElement('td'); tdNotes.textContent = item.notes || '—'; tr.appendChild(tdNotes);
 
     const tdPlatforms = document.createElement('td');
@@ -1856,7 +1924,7 @@ document.querySelectorAll('input[name="editBidMode"]').forEach(r=>{
 });
 function resetEditPanel(){
   editPanel.classList.remove('show');
-  ['edtArtist','edtAlbum','edtPrice','edtCost','edtSource','edtGenre','edtNotes','edtAuctionEnd'].forEach(id=>{ document.getElementById(id).value = ''; });
+  ['edtArtist','edtAlbum','edtPrice','edtCost','edtSource','edtRegion','edtGenre','edtSub','edtNotes','edtAuctionEnd'].forEach(id=>{ document.getElementById(id).value = ''; });
   document.getElementById('edtPlatformsEnable').checked = false;
   document.querySelectorAll('.edit-platform-check').forEach(cb=>cb.checked=false);
   document.querySelector('input[name="editBidMode"][value="keep"]').checked = true;
@@ -1878,7 +1946,9 @@ document.getElementById('batchEditBtn').addEventListener('click', async ()=>{
       document.getElementById('edtPrice').value = it.price || '';
       document.getElementById('edtCost').value = it.cost || '';
       document.getElementById('edtSource').value = it.source || '';
-      document.getElementById('edtGenre').value = it.genre || '';
+      document.getElementById('edtRegion').value = tagsToStr(it.regions);
+      document.getElementById('edtGenre').value = tagsToStr(it.genres);
+      document.getElementById('edtSub').value = tagsToStr(it.subgenres);
       document.getElementById('edtNotes').value = it.notes || '';
       document.getElementById('edtPlatformsEnable').checked = true;
       document.querySelectorAll('.edit-platform-check').forEach(cb=>{ cb.checked = (it.platforms||[]).includes(cb.value); });
@@ -1901,7 +1971,9 @@ document.getElementById('cancelEditBtn').addEventListener('click', resetEditPane
 document.getElementById('confirmEditBtn').addEventListener('click', async ()=>{
   if(selectedListingIds.size === 0){ resetEditPanel(); return; }
   const val = id => document.getElementById(id).value.trim();
-  const fields = { artist: val('edtArtist'), album: val('edtAlbum'), price: val('edtPrice'), cost: val('edtCost'), source: val('edtSource'), genre: val('edtGenre'), notes: val('edtNotes') };
+  const fields = { artist: val('edtArtist'), album: val('edtAlbum'), price: val('edtPrice'), cost: val('edtCost'), source: val('edtSource'), notes: val('edtNotes') };
+  // 三軸曲風：留空＝不改；非空＝以解析後的陣列取代
+  const taxRegionRaw = val('edtRegion'), taxGenreRaw = val('edtGenre'), taxSubRaw = val('edtSub');
   const platEnable = document.getElementById('edtPlatformsEnable').checked;
   const plats = Array.from(document.querySelectorAll('.edit-platform-check:checked')).map(cb=>cb.value);
   const bidMode = (document.querySelector('input[name="editBidMode"]:checked')||{}).value || 'keep';
@@ -1914,6 +1986,9 @@ document.getElementById('confirmEditBtn').addEventListener('click', async ()=>{
   listings.forEach(item=>{
     if(!selectedListingIds.has(item.id)) return;
     Object.keys(fields).forEach(k=>{ if(fields[k] !== '') item[k] = fields[k]; });
+    if(taxRegionRaw !== '') item.regions = parseTags(taxRegionRaw);
+    if(taxGenreRaw !== '') item.genres = parseTags(taxGenreRaw);
+    if(taxSubRaw !== '') item.subgenres = parseTags(taxSubRaw);
     if(platEnable) item.platforms = plats.slice();
     if(bidMode === '直購'){ item.biddingType = '直購'; item.auctionEnd = ''; }
     else if(bidMode === '競標'){ item.biddingType = '競標'; if(newAuctionEnd) item.auctionEnd = newAuctionEnd; }
@@ -1922,6 +1997,7 @@ document.getElementById('confirmEditBtn').addEventListener('click', async ()=>{
     if(status !== 'keep') item.status = status;
   });
   await saveKey('listings', listings);
+  refreshTaxonomyDatalists();
   resetEditPanel();
   selectedListingIds.clear();
   renderListings();
@@ -2391,6 +2467,7 @@ async function applyBackupObject(data, mode){
     const oldKeys = await imgAllKeys();
     for(const k of oldKeys){ await imgDelete(k); }
   }
+  migrateTaxonomy(listings);   // 匯入/同步進來的舊資料也補上三軸分類欄
 
   let restoredImgs = 0;
   if(data.images && typeof data.images === 'object'){
@@ -2523,6 +2600,9 @@ async function buildPublishPayload(){
   const items = forSale.map(l => ({
     id: l.id, artist: l.artist, album: l.album, price: l.price,
     genre: l.genre, notes: l.notes, sideLabel: l.sideLabel, hasImage: !!l.hasImage,
+    regions: Array.isArray(l.regions) ? l.regions : [],
+    genres: Array.isArray(l.genres) ? l.genres : [],
+    subgenres: Array.isArray(l.subgenres) ? l.subgenres : (l.genre ? [l.genre] : []),
     reserved: l.status === '保留中'
   }));
   const images = {};
@@ -2874,6 +2954,9 @@ async function init(){
   listings = await loadKey('listings');
   orders = await loadKey('orders');
   archive = await loadKey('archive');
+  // 三軸曲風分類：把舊的單一 genre 一次性遷移到 subgenres（冪等、非破壞）
+  if(migrateTaxonomy(listings)) await saveKey('listings', listings);
+  refreshTaxonomyDatalists();
 
   // iCloud 同步：開啟時讀取同步檔（合併），並啟動自動寫入
   await setupSync();
