@@ -1,6 +1,6 @@
 // Service worker for the PWA build. Caches the app shell so it opens offline
 // after the first visit. Only active when served over http(s) (not in Electron).
-const CACHE = 'cdshop-v18';
+const CACHE = 'cdshop-v19';
 const ASSETS = [
   './',
   './index.html',

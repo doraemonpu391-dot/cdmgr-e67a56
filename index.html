@@ -388,6 +388,7 @@
         <button class="secondary" id="batchEditBtn">編輯選取項目</button>
         <button class="secondary" id="batchRelistBtn">批量重新上架</button>
         <button class="danger-ghost" id="batchDeleteBtn">批量刪除</button>
+        <button class="ghost" id="cleanSoldImagesBtn" title="刪除已完成訂單商品的圖片以節省空間，財務資料保留在封存">🧹 清理已售出圖片</button>
       </div>
       <div class="relist-panel" id="relistPanel">
         <div style="font-weight:700;margin-bottom:10px;color:var(--gold);">批量重新上架</div>
@@ -680,6 +681,7 @@ let archive = [];
 let lastReportList = [];
 let lastReportRange = {start:'', end:''};
 let selectedListingIds = new Set();
+let _soldExpanded = false;   // 上架清單底部「已售出／已下架」摺疊區是否展開
 
 // ---------------------------------------------------------------
 // Generic helpers
@@ -1704,7 +1706,7 @@ function renderListings(){
 
   const ended = item => auctionEnded(item);
 
-  visible.forEach(item=>{
+  const buildRow = (item)=>{
     const tr = document.createElement('tr');
 
     const tdSel = document.createElement('td');
@@ -1827,8 +1829,27 @@ function renderListings(){
     actionsWrap.appendChild(delBtn);
     tdActions.appendChild(actionsWrap); tr.appendChild(tdActions);
 
-    tbody.appendChild(tr);
-  });
+    return tr;
+  };
+
+  // 在售/保留中等「活庫存」在上；已售出/已下架收進底部可摺疊區塊。
+  const SOLD_STATUSES = new Set(['已售出', '已下架']);
+  const activeItems = visible.filter(l => !SOLD_STATUSES.has(l.status));
+  const soldItems = visible.filter(l => SOLD_STATUSES.has(l.status));
+  const filterStatusVal = document.getElementById('filterStatus').value;
+  const soldOpen = _soldExpanded || SOLD_STATUSES.has(filterStatusVal);
+
+  activeItems.forEach(item => tbody.appendChild(buildRow(item)));
+
+  if(soldItems.length){
+    const hdr = document.createElement('tr'); hdr.className = 'sold-header';
+    const td = document.createElement('td'); td.colSpan = 14;
+    td.style.cssText = 'cursor:pointer;padding:9px 12px;background:#00000022;color:var(--muted);font-size:13px;user-select:none;border-top:1px solid var(--line);';
+    td.textContent = (soldOpen ? '▾ ' : '▸ ') + '已售出／已下架（' + soldItems.length + '）' + (soldOpen ? '' : ' — 點擊展開');
+    td.addEventListener('click', ()=>{ _soldExpanded = !soldOpen; renderListings(); });
+    hdr.appendChild(td); tbody.appendChild(hdr);
+    if(soldOpen){ soldItems.forEach(item => tbody.appendChild(buildRow(item))); }
+  }
 
   document.getElementById('listingCountLabel').textContent = `(${listings.length})`;
   document.getElementById('tabBadgeListings').textContent = listings.length;
@@ -1864,6 +1885,20 @@ document.getElementById('batchDeleteBtn').addEventListener('click', async ()=>{
   selectedListingIds.clear();
   await saveKey('listings', listings);
   renderListings();
+});
+
+// 維護：清理已售出商品的圖片（節省儲存空間；保留財務資料與文字記錄）
+document.getElementById('cleanSoldImagesBtn').addEventListener('click', async ()=>{
+  const targets = listings.filter(l => l.hasImage && l.status === '已售出');
+  if(targets.length === 0){ await uiAlert('目前沒有可清理的已售出商品圖片。'); return; }
+  if(!(await uiConfirm(`將清除 ${targets.length} 件已售出商品的圖片以節省空間。\n財務資料（成本／收益／售出時間）仍保留在封存與報表，商品文字記錄也保留；此動作無法復原。\n確定要清理嗎？`))) return;
+  let cleaned = 0;
+  for(const l of targets){
+    try{ await imgDelete(l.id); l.hasImage = false; cleaned++; }catch(e){}
+  }
+  await saveKey('listings', listings);
+  renderListings();
+  await uiAlert(`已清理 ${cleaned} 件已售出商品的圖片。`);
 });
 
 const relistPanel = document.getElementById('relistPanel');
