@@ -2713,13 +2713,37 @@ async function sha1HexBrowser(bytes){
   const buf = await crypto.subtle.digest('SHA-1', bytes);
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
+// 讀回線上目前的 catalog.json（用 token 走 GitHub API，不受 CDN 快取影響）。失敗回 null。
+async function fetchExistingCatalog(token){
+  try{
+    const r = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/shop/catalog.json?ref=${GH_BRANCH}`,
+      { headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' } });
+    if(!r || !r.ok) return null;
+    const j = JSON.parse(await r.text());
+    if(!j || !j.content) return null;
+    const bin = atob(String(j.content).replace(/\s/g, ''));
+    const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+    return JSON.parse(new TextDecoder('utf-8').decode(bytes));
+  }catch(e){ return null; }
+}
 // 手機/瀏覽器：用 GitHub API 一次 commit 寫入 catalog.json 與變動的圖片
 async function publishViaGitHub(payload, hint){
   const token = await loadGhToken();
   if(!token){ await uiAlert('請先在上方填入 GitHub Token（fine-grained，只給 cd-shop-manager 這個 repo 的 Contents 讀寫權限）。'); return null; }
+  // 手機沒有「介紹／優惠公告／社群／追蹤網址」的編輯 UI，這些設定也不隨備份同步過來，
+  // 本機會是空的 → 發布前先讀回線上 catalog，本機沒有的欄位一律沿用線上既有值，
+  // 否則手機發布會把商品頁的介紹文/優惠/社群整個清空。
+  hint.textContent = '讀取線上設定...';
+  const existing = (await fetchExistingCatalog(token)) || {};
+  const promo = payload.promo || existing.promo || '';
+  const intro = payload.intro || existing.intro || '';
+  const trackUrl = payload.trackUrl || existing.trackUrl || '';
+  const socials = (Array.isArray(payload.socials) && payload.socials.length)
+    ? payload.socials
+    : (Array.isArray(existing.socials) ? existing.socials : []);
   const catalogJson = JSON.stringify({
     generatedAt: payload.generatedAt, items: payload.items,
-    promo: payload.promo, intro: payload.intro, trackUrl: payload.trackUrl, socials: payload.socials
+    promo, intro, trackUrl, socials
   }, null, 2);
   return await CDGitHubPublish.publishShopToGitHub({
     token, owner: GH_OWNER, repo: GH_REPO, branch: GH_BRANCH,
