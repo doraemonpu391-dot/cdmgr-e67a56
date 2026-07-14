@@ -215,6 +215,10 @@
       <div id="socialsList"></div>
       <button class="ghost" id="addSocialBtn" type="button" style="margin-top:4px;">＋ 新增社群連結</button>
     </div>
+    <div id="collectionRow" style="display:none;margin-top:12px;">
+      <label class="field" style="display:block;font-size:12px;color:var(--teal);margin-bottom:4px;">個人收藏頁（/collection）連動的 Google 試算表：貼<b>網址或 ID</b>。日後要遷移到別的試算表時改這裡，按「發布商品頁」後生效。留空則用目前預設。</label>
+      <input type="text" id="shopCollectionInput" placeholder="https://docs.google.com/spreadsheets/d/…/edit　或直接貼試算表 ID" style="width:100%;background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;">
+    </div>
     <div id="ghRow" style="display:none;margin-top:12px;">
       <label class="field" style="display:block;font-size:12px;color:var(--gold);margin-bottom:4px;">手機發布用 GitHub Token（fine-grained，只給 <b>cd-shop-manager</b> 這個 repo 的 Contents 讀寫權限）。設定後手機也能按「發布商品頁」。</label>
       <input type="password" id="ghTokenInput" placeholder="github_pat_..." autocomplete="off" style="width:100%;background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;">
@@ -2682,7 +2686,11 @@ async function buildPublishPayload(){
   const socials = (Array.isArray(socialsRaw) ? socialsRaw : [])
     .map(it => ({ icon: it.icon || '', label: (it.label || '').trim(), url: (it.url || '').trim() }))
     .filter(it => it.url);   // 至少要有連結才發布
-  return { generatedAt: new Date().toISOString(), items, images, promo, intro, trackUrl, socials };
+  let collectionRaw;
+  if(hasNative){ const cel = document.getElementById('shopCollectionInput'); collectionRaw = cel ? cel.value.trim() : ''; }
+  else { collectionRaw = await loadShopCollection(); }
+  const collectionSheet = extractSheetId(collectionRaw) || DEFAULT_COLLECTION_SHEET;
+  return { generatedAt: new Date().toISOString(), items, images, promo, intro, trackUrl, socials, collectionSheet };
 }
 async function sha1HexBrowser(bytes){
   const buf = await crypto.subtle.digest('SHA-1', bytes);
@@ -2809,6 +2817,18 @@ function normalizeSocials(raw){
 }
 async function loadShopSocials(){ return normalizeSocials(await loadKey('shopSocials')); }
 async function saveShopSocials(items){ await saveKey('shopSocials', Array.isArray(items) ? items : []); }
+
+// 個人收藏頁連動的 Google 試算表（可日後遷移）。存原始輸入；發布時抽出純 ID。
+const DEFAULT_COLLECTION_SHEET = '1W7CVXLPnvjKi7QFsGfHdjIgqgMIdDOMuKx9v1_a7ekw';
+function extractSheetId(v){
+  v = String(v || '').trim();
+  const m = v.match(/\/d\/([\w-]+)/);   // 從完整網址取 /d/<ID>
+  if(m) return m[1];
+  if(/^[\w-]+$/.test(v)) return v;      // 已是純 ID
+  return '';
+}
+async function loadShopCollection(){ const a = await loadKey('shopCollectionSheet'); return (Array.isArray(a) && a[0]) ? String(a[0]) : ''; }
+async function saveShopCollection(v){ await saveKey('shopCollectionSheet', [v || '']); }
 // icon 縮圖到 <=128px 並保留透明（PNG）
 function downscaleIcon(dataUrl, maxDim){
   return new Promise((resolve)=>{
@@ -3046,6 +3066,14 @@ async function showNativeStorageInfo(){
         addBtn._wired = true;
         addBtn.addEventListener('click', async ()=>{ shopSocialsItems.push({ icon:'', label:'', url:'' }); await saveShopSocials(shopSocialsItems); renderSocialsEditor(); });
       }
+    }
+    // 個人收藏頁連動的試算表：載入既有值、變更即存
+    const collectionRow = document.getElementById('collectionRow');
+    const collInput = document.getElementById('shopCollectionInput');
+    if(collectionRow && collInput){
+      collectionRow.style.display = 'block';
+      collInput.value = await loadShopCollection();
+      collInput.addEventListener('change', ()=> saveShopCollection(collInput.value.trim()));
     }
     if(info.fellBack){
       const warn = document.getElementById('nativeWarnRow');
