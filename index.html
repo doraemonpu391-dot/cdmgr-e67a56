@@ -164,6 +164,9 @@
   .breakdown-box{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:14px 16px;}
   .breakdown-box h3{margin:0 0 8px;font-size:13px;color:var(--text-muted);letter-spacing:.5px;font-weight:700;}
   .breakdown-row{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;}
+  .ana-tab{background:transparent;border:none;color:var(--text-muted);border-radius:7px;padding:6px 14px;font-size:13px;cursor:pointer;font-family:inherit;white-space:nowrap;}
+  .ana-tab.active{background:var(--gold);color:#1a1305;font-weight:600;}
+  .ana-tab:not(.active):hover{color:var(--text);}
   .breakdown-row span:last-child{font-family:'JetBrains Mono',monospace;color:var(--gold);}
 
   @media (max-width:560px){h1{font-size:24px;} .wrap{padding:22px 12px 60px;} nav.tabs button{padding:10px 10px;font-size:12.5px;}}
@@ -591,7 +594,13 @@
     <div class="panel-card">
       <div class="row-between">
         <h2>數據分析 <span class="muted-small" id="anaUpdated"></span></h2>
-        <button class="primary" id="refreshAnaBtn">重新整理</button>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <div class="ana-switch" style="display:flex;gap:4px;background:#14151c;border:1px solid var(--line);border-radius:9px;padding:3px;">
+            <button class="ana-tab active" id="anaTabShop" type="button" data-sheet="">商店主頁</button>
+            <button class="ana-tab" id="anaTabCollection" type="button" data-sheet="collection">個人收藏頁</button>
+          </div>
+          <button class="primary" id="refreshAnaBtn">重新整理</button>
+        </div>
       </div>
       <div id="anaNotConfigured" class="note-banner" style="display:none;">尚未設定訪客追蹤。請先在最上方「訪客追蹤設定」填入 Apps Script 網址與密鑰，並發布商品頁。</div>
       <div id="anaError" class="note-banner" style="display:none;color:var(--danger);border-color:var(--danger-deep);"></div>
@@ -2935,7 +2944,7 @@ function anaRecent(recent){
   });
 }
 // JSONP：手機/瀏覽器若被 CORS 擋下時的後備（Apps Script 支援 ?callback=）
-function jsonpEvents(url, key){
+function jsonpEvents(url, key, sheet){
   return new Promise((resolve, reject)=>{
     const cb = '__anaCb' + Date.now() + Math.floor(Math.random()*1e6);
     const s = document.createElement('script');
@@ -2947,20 +2956,22 @@ function jsonpEvents(url, key){
       else resolve({ events: (data && Array.isArray(data.events)) ? data.events : [] });
     };
     s.onerror = ()=>{ cleanup(); reject(new Error('JSONP 載入失敗')); };
-    s.src = CDAnalytics.buildEventsUrl(url, key, 'callback='+cb);
+    s.src = CDAnalytics.buildEventsUrl(url, key, 'callback='+cb + (sheet ? '&sheet='+encodeURIComponent(sheet) : ''));
     document.head.appendChild(s);
   });
 }
 // Mac：走主程序（免 CORS）。手機/瀏覽器：直接抓，被擋就退回 JSONP。
-async function fetchEvents(url, key){
+// sheet：''＝商店主頁(visits 表)、'collection'＝個人收藏頁那張表
+async function fetchEvents(url, key, sheet){
   if(hasNative && window.cdshopNative.fetchAnalytics){
-    return await window.cdshopNative.fetchAnalytics(url, key);
+    return await window.cdshopNative.fetchAnalytics(url, key, sheet);
   }
+  const extra = sheet ? 'sheet='+encodeURIComponent(sheet) : '';
   try{
-    const res = await fetch(CDAnalytics.buildEventsUrl(url, key), { redirect:'follow' });
+    const res = await fetch(CDAnalytics.buildEventsUrl(url, key, extra), { redirect:'follow' });
     return CDAnalytics.parseEventsResponse(await res.text());
   }catch(e){
-    try{ return await jsonpEvents(url, key); }
+    try{ return await jsonpEvents(url, key, sheet); }
     catch(e2){ return { error:'讀取失敗（瀏覽器安全限制擋下，且 JSONP 後備也失敗）：'+(e2&&e2.message||e2)+'。請確認 Apps Script 已重新部署且存取權為「任何人」。' }; }
   }
 }
@@ -2992,6 +3003,7 @@ async function setupAnalyticsUI(){
   }
 }
 let _anaLoading=false;
+let _anaSheet='';   // ''＝商店主頁(visits)、'collection'＝個人收藏頁
 async function loadAnalytics(){
   const nc=document.getElementById('anaNotConfigured'), err=document.getElementById('anaError'), body=document.getElementById('anaBody');
   const url = await loadShopTrackUrl(), key = await loadShopStatsKey();
@@ -3000,7 +3012,7 @@ async function loadAnalytics(){
   if(_anaLoading) return; _anaLoading=true;
   document.getElementById('anaUpdated').textContent='讀取中…';
   try{
-    const res = await fetchEvents(url, key);
+    const res = await fetchEvents(url, key, _anaSheet);
     if(!res || res.error){ err.textContent = (res && res.error) || '讀取失敗'; err.style.display='block'; body.style.display='none'; document.getElementById('anaUpdated').textContent=''; return; }
     const stats = CDAnalytics.aggregateEvents(res.events, 30);
     document.getElementById('anaTotal').textContent = stats.total;
@@ -3016,6 +3028,16 @@ async function loadAnalytics(){
 }
 document.getElementById('refreshAnaBtn').addEventListener('click', loadAnalytics);
 document.getElementById('tabBtnAnalytics').addEventListener('click', ()=> loadAnalytics());
+// 商店主頁 / 個人收藏頁 切換（讀 Apps Script 的不同工作表）
+document.querySelectorAll('.ana-tab').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const sheet = btn.getAttribute('data-sheet') || '';
+    if(sheet === _anaSheet) return;
+    _anaSheet = sheet;
+    document.querySelectorAll('.ana-tab').forEach(b=> b.classList.toggle('active', b === btn));
+    loadAnalytics();
+  });
+});
 // 首次使用時預填的範例（使用者可直接改成自己的帳號再發布）
 const EXAMPLE_INTRO = [
   '👋 歡迎光臨我的 CD 出清小舖！',
