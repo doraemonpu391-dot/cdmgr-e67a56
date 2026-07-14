@@ -57,8 +57,10 @@
     const byDevice = tally(list, (e) => e.device || deviceOf(e.ua));
     const byBrowser = tally(list, (e) => e.browser || browserOf(e.ua));
     const byLang = tally(list, (e) => e.lang);
-    // Search terms from ANY event carrying a query (pageview ?q= or a search event)
-    const searches = tally(all.filter((e) => (e.q || '').trim()), (e) => e.q.trim());
+    // Search terms from ANY event carrying a query (pageview ?q= or a search event).
+    // q may come back from the sheet as a number (e.g. searched "2001") → coerce to string.
+    const qstr = (e) => String(e && e.q != null ? e.q : '').trim();
+    const searches = tally(all.filter((e) => qstr(e)), qstr);
 
     // Daily counts, filled for the trailing `days` days ending today
     const dayCount = {};

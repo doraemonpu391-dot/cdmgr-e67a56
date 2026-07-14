@@ -2308,6 +2308,13 @@ function setListingsArchived(order, archived){
   return changed;
 }
 
+// 封存訂單顯示用：每個專輯後面帶括號標價（從成本快照 items 取，涵蓋舊訂單）；無 items 則回退原 content。
+function orderContentDisplay(order){
+  if(order && Array.isArray(order.items) && order.items.length){
+    return order.items.map(it => (it.name || '') + '（' + fmtMoney(it.price || 0) + '）').join('、');
+  }
+  return (order && order.content) || '';
+}
 function renderArchive(){
   const tbody = document.getElementById('archiveBody'); tbody.innerHTML = '';
   if(archive.length === 0){
@@ -2318,7 +2325,7 @@ function renderArchive(){
     const tr = document.createElement('tr');
     const costCell = hasCostSnapshot(order) ? fmtMoney(order.totalCost) : '—';
     const profitCell = hasCostSnapshot(order) ? fmtMoney(orderProfit(order)) : '—';
-    [order.completedDate, order.date, order.source, order.buyer, order.content,
+    [order.completedDate, order.date, order.source, order.buyer, orderContentDisplay(order),
      order.amount ? fmtMoney(order.amount) : '—', costCell, profitCell, order.discount, order.shipping, order.orderNo, order.notes].forEach(val=>{
       const td = document.createElement('td'); td.textContent = val || '—'; tr.appendChild(td);
     });
