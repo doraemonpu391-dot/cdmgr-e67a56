@@ -680,7 +680,7 @@ function listingTaxonomyText(l){
 }
 
 const composerState = Array.from({length: SLOTS}, () => ({
-  imgSrc:null, artist:'', album:'', price:'', notes:'', genre:'', cost:'', source:'',
+  imgSrc:null, artist:'', album:'', price:'', notes:'', region:'', genre:'', subgenre:'', cost:'', source:'',
   sideLabel:false, platforms:[], biddingType:'', auctionEnd:''
 }));
 
@@ -990,7 +990,11 @@ function buildCards(){
       </div>
       <div class="two-col">
         <div class="field-group"><label class="field">貨源</label><input type="text" id="source-${i}" placeholder="例如：光華商場"></div>
-        <div class="field-group"><label class="field">曲風</label><input type="text" id="genre-${i}" placeholder="例如：Pop"></div>
+        <div class="field-group"><label class="field">地區/語言</label><input type="text" id="region-${i}" list="regionOptions" placeholder="可多個，逗號分隔"></div>
+      </div>
+      <div class="two-col">
+        <div class="field-group"><label class="field">大類 Genre</label><input type="text" id="genre-${i}" list="genreOptions" placeholder="可多個，逗號分隔"></div>
+        <div class="field-group"><label class="field">子曲風 Sub-genre</label><input type="text" id="subgenre-${i}" list="subOptions" placeholder="可多個，逗號分隔"></div>
       </div>
       <div class="field-group"><label class="field">備注（選填）</label><textarea id="notes-${i}" style="min-height:44px;"></textarea></div>
       <label class="check-row"><input type="checkbox" id="sidelabel-${i}"> 有側標</label>
@@ -1014,7 +1018,7 @@ function buildCards(){
       composerState[i].imgSrc = dataUrl; renderDrop(i); updateSlotProgress();
     });
 
-    ['artist','album','price','cost','source','genre','notes'].forEach(field=>{
+    ['artist','album','price','cost','source','region','genre','subgenre','notes'].forEach(field=>{
       document.getElementById(`${field}-${i}`).addEventListener('input',(e)=>{
         composerState[i][field] = e.target.value;
         refreshCardFilledState(i);
@@ -1262,7 +1266,8 @@ function buildCaptionFromIntros(introBySlot){
     const s = o.s;
     const namePart = formatName(s.artist, s.album);
     const pricePart = s.price ? `NT$ ${s.price}` : '價格未定';
-    const genrePart = s.genre ? `｜曲風：${s.genre}` : '';
+    const _tax = [s.region, s.genre, s.subgenre].filter(Boolean).join('・');
+    const genrePart = _tax ? `｜曲風：${_tax}` : '';
     let block = `${i+1}. ${namePart}｜${pricePart}${genrePart}`;
     const intro = introBySlot ? introBySlot[o.idx] : '';
     if(intro) block += `\n　${intro}`;
@@ -1325,7 +1330,9 @@ async function buildListingFormText(){
       `標價: ${s.price||''}`,
       `成本: ${s.cost||''}`,
       `貨源: ${s.source||''}`,
-      `曲風: ${s.genre||''}`,
+      `地區: ${s.region||''}`,
+      `大類: ${s.genre||''}`,
+      `子曲風: ${s.subgenre||''}`,
       `備注: ${s.notes||''}`,
       `側標: ${s.sideLabel ? '是' : '否'}`,
       `類型: ${s.biddingType||''}`,
@@ -2071,7 +2078,7 @@ document.getElementById('loadToComposerBtn').addEventListener('click', async ()=
 
   // Reset composer state
   for(let i=0;i<SLOTS;i++){
-    composerState[i] = { imgSrc:null, artist:'', album:'', price:'', notes:'', genre:'', cost:'', source:'', sideLabel:false, platforms:[], biddingType:'', auctionEnd:'' };
+    composerState[i] = { imgSrc:null, artist:'', album:'', price:'', notes:'', region:'', genre:'', subgenre:'', cost:'', source:'', sideLabel:false, platforms:[], biddingType:'', auctionEnd:'' };
   }
   // Fill from selected listings + load images
   for(let i=0;i<selected.length;i++){
@@ -2079,7 +2086,8 @@ document.getElementById('loadToComposerBtn').addEventListener('click', async ()=
     composerState[i] = {
       imgSrc: null,
       artist: l.artist||'', album: l.album||'', price: l.price||'', notes: l.notes||'',
-      genre: l.genre||'', cost: l.cost||'', source: l.source||'',
+      region: tagsToStr(l.regions), genre: tagsToStr(l.genres), subgenre: tagsToStr(l.subgenres),
+      cost: l.cost||'', source: l.source||'',
       sideLabel: !!l.sideLabel, platforms: (l.platforms||[]).slice(),
       biddingType: l.biddingType||'', auctionEnd: l.auctionEnd||''
     };
