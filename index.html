@@ -1105,7 +1105,7 @@ buildCards();
 updateSlotProgress();
 
 // ---- Canvas composite ----
-const CELL = 620, GRID = 3, PAD = 14, OUTER = 28, BOTTOM_BAR = 220;
+const CELL = 620, GRID = 3, PAD = 14, OUTER = 28, BOTTOM_BAR = 220, FOOTER = 120;
 
 async function loadFonts(){
   await Promise.all([
@@ -1170,14 +1170,15 @@ async function generateComposite(){
   await loadFonts();
   const size = OUTER*2 + GRID*CELL + (GRID-1)*PAD;
   const canvas = document.getElementById('outputCanvas');
-  canvas.width = size; canvas.height = size;
+  canvas.width = size; canvas.height = size + FOOTER;
   const ctx = canvas.getContext('2d');
 
-  const bgGrad = ctx.createLinearGradient(0,0,size,size);
+  const bgGrad = ctx.createLinearGradient(0,0,size,size+FOOTER);
   bgGrad.addColorStop(0, '#15161d'); bgGrad.addColorStop(1, '#0e0f14');
-  ctx.fillStyle = bgGrad; ctx.fillRect(0,0,size,size);
+  ctx.fillStyle = bgGrad; ctx.fillRect(0,0,size,size+FOOTER);
 
   const images = await Promise.all(composerState.map(s => loadImage(s.imgSrc)));
+  const logoImg = await loadImage((document.querySelector('.brandmark img')||{}).src || null);
 
   for(let i=0;i<SLOTS;i++){
     const row = Math.floor(i/GRID), col = i%GRID;
@@ -1248,6 +1249,16 @@ async function generateComposite(){
     }
 
     ctx.restore();
+  }
+
+  // 品牌頁尾：ARP logo 置中於格線下方的專屬區塊，不覆蓋任何商品照片/文字/價格
+  const footY = size;
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(OUTER, footY + 0.5); ctx.lineTo(size - OUTER, footY + 0.5); ctx.stroke();
+  if(logoImg && logoImg.naturalWidth){
+    const logoH = 66;
+    const logoW = Math.round(logoH * (logoImg.naturalWidth / logoImg.naturalHeight));
+    ctx.drawImage(logoImg, Math.round((size - logoW) / 2), Math.round(footY + (FOOTER - logoH) / 2), logoW, logoH);
   }
 
   document.getElementById('composerOutputs').classList.add('show');
