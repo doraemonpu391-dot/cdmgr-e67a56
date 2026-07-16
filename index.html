@@ -646,7 +646,30 @@ const BID_TYPES = ['競標', '直購'];
 
 // 三軸曲風分類（Discogs 式）：地區/語言、大類 Genre、子曲風 Sub-genre。皆受控清單可自訂複選。
 const REGION_OPTIONS = ['華語', '台語', '粵語', '西洋', '日本', '韓國', '其他'];
-const GENRE_OPTIONS  = ['流行', '搖滾', '電子', '嘻哈/R&B', '爵士', '古典', '民謠/鄉村', '原聲帶', '演歌/傳統', '其他'];
+const GENRE_OPTIONS  = ['Pop', 'Rock', 'Electronic', 'Hip-Hop/R&B', 'Jazz', 'Classical', 'Folk/Country', 'Soundtrack', 'Enka/Traditional', 'Other'];
+// 大類改英文：把既有中文值一次性換成英文（只換完全相符的已知標籤，自訂值不動）
+const GENRE_ZH_TO_EN = {
+  '流行':'Pop', '搖滾':'Rock', '電子':'Electronic', '嘻哈/R&B':'Hip-Hop/R&B', '嘻哈':'Hip-Hop/R&B',
+  'R&B':'Hip-Hop/R&B', '爵士':'Jazz', '古典':'Classical', '民謠/鄉村':'Folk/Country',
+  '民謠':'Folk/Country', '鄉村':'Folk/Country', '原聲帶':'Soundtrack', '演歌/傳統':'Enka/Traditional',
+  '演歌':'Enka/Traditional', '傳統':'Enka/Traditional', '其他':'Other'
+};
+// 把一個標籤陣列裡的已知中文大類換成英文並去重；回傳是否有變動。
+function _mapGenresToEn(arr){
+  if(!Array.isArray(arr)) return false;
+  var changed = false, seen = {}, out = [];
+  arr.forEach(function(v){
+    var s = String(v == null ? '' : v).trim();
+    if(!s) return;
+    var mapped = GENRE_ZH_TO_EN[s] || s;
+    if(mapped !== s) changed = true;
+    if(!seen[mapped]){ seen[mapped] = 1; out.push(mapped); }
+    else changed = true;                       // 換完後撞名 → 去重也算變動
+  });
+  if(out.length !== arr.length) changed = true;
+  if(changed){ arr.length = 0; Array.prototype.push.apply(arr, out); }
+  return changed;
+}
 // 把「逗號/頓號分隔字串」解析成去重標籤陣列；反向則用頓號串起。
 function parseTags(s){
   return String(s==null?'':s).split(/[,、，]/).map(function(x){return x.trim();})
@@ -667,6 +690,9 @@ function migrateTaxonomy(list){
       l.subgenres = g ? [g] : [];
       changed = true;
     }
+    // 大類改英文：把既有的中文大類/子曲風換成英文（冪等；地區不動、自訂值不動）
+    if(_mapGenresToEn(l.genres)) changed = true;
+    if(_mapGenresToEn(l.subgenres)) changed = true;
   });
   return changed;
 }
@@ -1630,6 +1656,7 @@ document.getElementById('importBtn').addEventListener('click', async ()=>{
     return;
   }
   await migrateImportedImages(parsed);
+  migrateTaxonomy(parsed);   // 舊咒語若帶中文大類，匯入當下就換成英文
   listings.push(...parsed);
   await saveKey('listings', listings);
   document.getElementById('importBox').value = '';
