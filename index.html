@@ -478,6 +478,8 @@
           <div><label class="field">訂單來源</label><select id="orderSourceSel"></select></div>
           <div><label class="field">買家</label><input type="text" id="orderBuyer" placeholder="買家名稱／帳號"></div>
           <div><label class="field">運送方式</label><select id="orderShippingSel"></select></div>
+          <div class="meet-field" style="display:none;"><label class="field">面交時間</label><input type="datetime-local" id="orderMeetAt"></div>
+          <div class="meet-field" style="display:none;"><label class="field">面交地點</label><input type="text" id="orderMeetPlace" placeholder="例如：板橋站 / 光華商場"></div>
           <div><label class="field">付款狀態</label><select id="orderPaymentSel"></select></div>
           <div><label class="field">訂單編號（選填）</label><input type="text" id="orderNoInput"></div>
           <div><label class="field">訂單金額（可調整）</label><input type="number" id="orderAmount" min="0"></div>
@@ -638,7 +640,7 @@
 // ---------------------------------------------------------------
 const SLOTS = 9;
 const PLATFORMS = ['Facebook Marketplace', 'Yahoo拍賣', '旋轉拍賣', 'Discogs', 'Threads'];
-const SHIPPING_METHODS = ['7-11店到店', '全家店到店', '賣貨便'];
+const SHIPPING_METHODS = ['7-11店到店', '全家店到店', '賣貨便', '面交'];
 const SHIP_STATUSES = ['待出貨', '已出貨', '問題件'];
 const PAYMENT_STATUSES = ['未付款', '已付款'];
 const LISTING_STATUSES = ['在售', '保留中', '已售出', '已下架'];
@@ -1931,6 +1933,7 @@ function renderListings(){
   document.getElementById('tabBadgeListings').textContent = listings.length;
   updateListingStats();
   updateSelectionUI();
+  renderTodoBanner();   // 商品/競標有異動就即時更新今日待辦
 }
 
 function updateListingStats(){
@@ -2186,10 +2189,19 @@ document.getElementById('createOrderBtn').addEventListener('click', async ()=>{
   document.getElementById('orderCost').value = costTotal || '';
   document.getElementById('orderDiscount').value = '';
   document.getElementById('orderNotesInput').value = '';
+  document.getElementById('orderMeetAt').value = '';
+  document.getElementById('orderMeetPlace').value = '';
+  updateMeetFields();
 
   orderPanel.classList.add('show');
   orderPanel.scrollIntoView({behavior:'smooth', block:'center'});
 });
+// 選「面交」時才顯示面交時間/地點欄
+function updateMeetFields(){
+  const show = document.getElementById('orderShippingSel').value === '面交';
+  document.querySelectorAll('.meet-field').forEach(el => el.style.display = show ? '' : 'none');
+}
+document.getElementById('orderShippingSel').addEventListener('change', updateMeetFields);
 
 document.getElementById('cancelOrderBtn').addEventListener('click', ()=>{
   orderPanel.classList.remove('show');
@@ -2221,6 +2233,8 @@ document.getElementById('confirmOrderBtn').addEventListener('click', async ()=>{
     items, totalCost,
     amount: document.getElementById('orderAmount').value,
     shipping: document.getElementById('orderShippingSel').value,
+    meetAt: document.getElementById('orderShippingSel').value === '面交' ? (document.getElementById('orderMeetAt').value || '') : '',
+    meetPlace: document.getElementById('orderShippingSel').value === '面交' ? document.getElementById('orderMeetPlace').value.trim() : '',
     orderNo: document.getElementById('orderNoInput').value.trim(),
     shipStatus: '待出貨',
     paymentStatus: document.getElementById('orderPaymentSel').value || '未付款',
@@ -2289,7 +2303,17 @@ function renderOrders(){
     const tdContent = document.createElement('td'); tdContent.appendChild(makeTextInput(order.content, v=>{ order.content=v; persist(); }, true)); tr.appendChild(tdContent);
     const tdAmount = document.createElement('td'); tdAmount.appendChild(makeNumberInput(order.amount, v=>{ order.amount=v; persist(); updateOrderStats(); })); tr.appendChild(tdAmount);
     const tdCost = document.createElement('td'); tdCost.appendChild(makeNumberInput(order.totalCost, v=>{ order.totalCost = (v===''?'':(parseFloat(v)||0)); persist(); })); tr.appendChild(tdCost);
-    const tdShipping = document.createElement('td'); tdShipping.appendChild(makeSelect(SHIPPING_METHODS, order.shipping, v=>{ order.shipping=v; persist(); }, true)); tr.appendChild(tdShipping);
+    const tdShipping = document.createElement('td');
+    tdShipping.appendChild(makeSelect(SHIPPING_METHODS, order.shipping, v=>{ order.shipping=v; if(v!=='面交'){ order.meetAt=''; order.meetPlace=''; } persist(); renderOrders(); }, true));
+    if(order.shipping === '面交'){
+      const mw = document.createElement('div'); mw.style.cssText = 'margin-top:5px;display:flex;flex-direction:column;gap:4px;';
+      const mt = document.createElement('input'); mt.type = 'datetime-local'; mt.value = order.meetAt || ''; mt.title = '面交時間'; mt.style.cssText = 'font-size:12px;padding:4px 6px;';
+      mt.addEventListener('change', ()=>{ order.meetAt = mt.value; persist(); renderTodoBanner(); });
+      const mp = document.createElement('input'); mp.type = 'text'; mp.value = order.meetPlace || ''; mp.placeholder = '面交地點'; mp.className = 'cell-input'; mp.style.cssText = 'font-size:12px;';
+      mp.addEventListener('change', ()=>{ order.meetPlace = mp.value.trim(); persist(); });
+      mw.appendChild(mt); mw.appendChild(mp); tdShipping.appendChild(mw);
+    }
+    tr.appendChild(tdShipping);
 
     const tdOrderNo = document.createElement('td');
     const orderNoWrap = document.createElement('div'); orderNoWrap.className = 'orderno-cell';
@@ -2345,6 +2369,7 @@ function updateOrderStats(){
   document.getElementById('statOrderValue').textContent = fmtMoney(total);
   document.getElementById('statPendingShip').textContent = pendingShip;
   document.getElementById('statUnpaid').textContent = unpaid;
+  renderTodoBanner();   // 訂單有異動（新增/狀態/金額）就即時更新今日待辦
 }
 
 /* ================================================================
@@ -3186,12 +3211,18 @@ function renderTodoBanner(){
   const endingToday = active.filter(l => (l.auctionEnd||'').slice(0,10) === today && new Date(l.auctionEnd) > now);
   const pendingShip = orders.filter(o => o.shipStatus === '待出貨');
   const unpaid = orders.filter(o => o.paymentStatus === '未付款');
+  const meetToday = orders.filter(o => o.shipping === '面交' && o.shipStatus === '待出貨' && (o.meetAt||'').slice(0,10) === today);
 
   const lines = [];
   // name 部分是使用者輸入/同步資料，一律走 textContent（append 字串＝文字節點），不進 innerHTML
   const nameList = arr => arr.slice(0,3).map(l=>formatName(l.artist,l.album)).join('、') + (arr.length>3 ? ` 等 ${arr.length} 筆` : '');
+  const meetDesc = arr => arr.slice(0,3).map(o=>{
+    const t = (o.meetAt||'').slice(11,16);
+    return [o.buyer, o.meetPlace, t].filter(Boolean).join(' ');
+  }).join('、') + (arr.length>3 ? ` 等 ${arr.length} 筆` : '');
   if(endedUnhandled.length) lines.push({tab:'listings', emoji:'🔔', bold:`${endedUnhandled.length} 筆競標已截標待處理`, boldColor:'var(--gold)', tail:'：'+nameList(endedUnhandled)});
   if(endingToday.length) lines.push({tab:'listings', emoji:'⏰', tail:`今日截標 ${endingToday.length} 筆：${nameList(endingToday)}`});
+  if(meetToday.length) lines.push({tab:'orders', emoji:'🤝', bold:`今日面交 ${meetToday.length} 筆`, boldColor:'var(--teal)', tail:'：'+meetDesc(meetToday)});
   if(pendingShip.length) lines.push({tab:'orders', emoji:'📦', tail:`待出貨訂單 ${pendingShip.length} 筆`});
   if(unpaid.length) lines.push({tab:'orders', emoji:'💰', tail:`未付款訂單 ${unpaid.length} 筆`});
 
