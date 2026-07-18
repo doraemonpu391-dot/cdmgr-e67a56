@@ -360,6 +360,7 @@
           <label><input type="checkbox" class="platform-check" value="旋轉拍賣"> 旋轉拍賣</label>
           <label><input type="checkbox" class="platform-check" value="Discogs"> Discogs</label>
           <label><input type="checkbox" class="platform-check" value="Threads"> Threads</label>
+          <label><input type="checkbox" class="platform-check" value="Instagram"> Instagram</label>
         </div>
         <div class="bidtype-checks">
           <label><input type="radio" name="lstBidType" value="競標"> 競標</label>
@@ -390,7 +391,7 @@
       <div class="toolbar">
         <input type="text" id="listingSearch" class="search-input" placeholder="搜尋藝人／專輯...">
         <select id="filterStatus" class="status-select" title="依狀態篩選"><option value="">狀態：全部</option><option value="在售">在售</option><option value="保留中">保留中</option><option value="已售出">已售出</option><option value="已下架">已下架</option></select>
-        <select id="filterPlatform" class="status-select" title="依上架平台篩選"><option value="">平台：全部</option><option value="Facebook Marketplace">Facebook Marketplace</option><option value="Yahoo拍賣">Yahoo拍賣</option><option value="旋轉拍賣">旋轉拍賣</option><option value="Discogs">Discogs</option><option value="Threads">Threads</option><option value="__none__">未設定平台</option></select>
+        <select id="filterPlatform" class="status-select" title="依上架平台篩選"><option value="">平台：全部</option><option value="Facebook Marketplace">Facebook Marketplace</option><option value="Yahoo拍賣">Yahoo拍賣</option><option value="旋轉拍賣">旋轉拍賣</option><option value="Discogs">Discogs</option><option value="Threads">Threads</option><option value="Instagram">Instagram</option><option value="__none__">未設定平台</option></select>
         <select id="filterSource" class="status-select" title="依貨源篩選"><option value="">貨源：全部</option></select>
         <select id="filterGenre" class="status-select" title="依曲風篩選"><option value="">曲風：全部</option></select>
         <button class="ghost" id="clearFiltersBtn" style="display:none;">✕ 清除篩選</button>
@@ -448,6 +449,7 @@
             <label><input type="checkbox" class="edit-platform-check" value="旋轉拍賣"> 旋轉拍賣</label>
             <label><input type="checkbox" class="edit-platform-check" value="Discogs"> Discogs</label>
             <label><input type="checkbox" class="edit-platform-check" value="Threads"> Threads</label>
+            <label><input type="checkbox" class="edit-platform-check" value="Instagram"> Instagram</label>
           </div>
           <div class="bidtype-checks" style="grid-column:1/-1;flex-wrap:wrap;">
             <span style="font-size:12px;color:var(--text-muted);align-self:center;">銷售模式：</span>
@@ -650,7 +652,7 @@
 // Constants
 // ---------------------------------------------------------------
 const SLOTS = 9;
-const PLATFORMS = ['Facebook Marketplace', 'Yahoo拍賣', '旋轉拍賣', 'Discogs', 'Threads'];
+const PLATFORMS = ['Facebook Marketplace', 'Yahoo拍賣', '旋轉拍賣', 'Discogs', 'Threads', 'Instagram'];
 const SHIPPING_METHODS = ['7-11店到店', '全家店到店', '賣貨便', '面交'];
 const SHIP_STATUSES = ['待出貨', '已出貨', '問題件'];
 const PAYMENT_STATUSES = ['未付款', '已付款'];
