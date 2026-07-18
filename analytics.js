@@ -86,9 +86,10 @@
   }
 
   // Build the Apps Script events endpoint URL.
-  function buildEventsUrl(url, key, extra) {
+  function buildEventsUrl(url, key, extra, action) {
     var u = String(url || '');
-    u += (u.indexOf('?') === -1 ? '?' : '&') + 'action=events&key=' + encodeURIComponent(key || '');
+    u += (u.indexOf('?') === -1 ? '?' : '&') + 'action=' + encodeURIComponent(action || 'events')
+       + '&key=' + encodeURIComponent(key || '');
     if (extra) u += '&' + extra;
     return u;
   }
@@ -107,6 +108,7 @@
       return { error: '回傳的不是 JSON：' + t.slice(0, 80) };
     }
     if (data && data.error) return { error: '讀取失敗：' + data.error + '（請確認密鑰 STATS_KEY 是否一致）' };
+    if (data && Array.isArray(data.feedback)) return { feedback: data.feedback };
     return { events: (data && Array.isArray(data.events)) ? data.events : [] };
   }
 

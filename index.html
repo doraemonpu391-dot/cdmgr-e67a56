@@ -601,12 +601,22 @@
           <div class="ana-switch" style="display:flex;gap:4px;background:#14151c;border:1px solid var(--line);border-radius:9px;padding:3px;">
             <button class="ana-tab active" id="anaTabShop" type="button" data-sheet="">商店主頁</button>
             <button class="ana-tab" id="anaTabCollection" type="button" data-sheet="collection">個人收藏頁</button>
+            <button class="ana-tab" id="anaTabFeedback" type="button" data-sheet="__feedback">意見回饋</button>
           </div>
           <button class="primary" id="refreshAnaBtn">重新整理</button>
         </div>
       </div>
       <div id="anaNotConfigured" class="note-banner" style="display:none;">尚未設定訪客追蹤。請先在最上方「訪客追蹤設定」填入 Apps Script 網址與密鑰，並發布商品頁。</div>
       <div id="anaError" class="note-banner" style="display:none;color:var(--danger);border-color:var(--danger-deep);"></div>
+      <div id="anaFeedbackBody" style="display:none;">
+        <div class="muted-small" style="margin-bottom:8px;" id="anaFbCount"></div>
+        <div class="table-wrap">
+          <table class="archive-table" id="anaFbTable" style="min-width:760px;">
+            <thead><tr><th>時間</th><th>類型</th><th>留言</th><th>聯絡方式</th><th>來源頁</th></tr></thead>
+            <tbody id="anaFbBody"></tbody>
+          </table>
+        </div>
+      </div>
       <div id="anaBody" style="display:none;">
         <div class="stat-row">
           <div class="stat-box"><div class="label">總造訪</div><div class="value" id="anaTotal">0</div></div>
@@ -3063,7 +3073,7 @@ function anaRecent(recent){
   });
 }
 // JSONP：手機/瀏覽器若被 CORS 擋下時的後備（Apps Script 支援 ?callback=）
-function jsonpEvents(url, key, sheet){
+function jsonpEvents(url, key, sheet, action){
   return new Promise((resolve, reject)=>{
     const cb = '__anaCb' + Date.now() + Math.floor(Math.random()*1e6);
     const s = document.createElement('script');
@@ -3075,22 +3085,22 @@ function jsonpEvents(url, key, sheet){
       else resolve({ events: (data && Array.isArray(data.events)) ? data.events : [] });
     };
     s.onerror = ()=>{ cleanup(); reject(new Error('JSONP 載入失敗')); };
-    s.src = CDAnalytics.buildEventsUrl(url, key, 'callback='+cb + (sheet ? '&sheet='+encodeURIComponent(sheet) : ''));
+    s.src = CDAnalytics.buildEventsUrl(url, key, 'callback='+cb + (sheet ? '&sheet='+encodeURIComponent(sheet) : ''), action);
     document.head.appendChild(s);
   });
 }
 // Mac：走主程序（免 CORS）。手機/瀏覽器：直接抓，被擋就退回 JSONP。
 // sheet：''＝商店主頁(visits 表)、'collection'＝個人收藏頁那張表
-async function fetchEvents(url, key, sheet){
+async function fetchEvents(url, key, sheet, action){
   if(hasNative && window.cdshopNative.fetchAnalytics){
-    return await window.cdshopNative.fetchAnalytics(url, key, sheet);
+    return await window.cdshopNative.fetchAnalytics(url, key, sheet, action);
   }
   const extra = sheet ? 'sheet='+encodeURIComponent(sheet) : '';
   try{
-    const res = await fetch(CDAnalytics.buildEventsUrl(url, key, extra), { redirect:'follow' });
+    const res = await fetch(CDAnalytics.buildEventsUrl(url, key, extra, action), { redirect:'follow' });
     return CDAnalytics.parseEventsResponse(await res.text());
   }catch(e){
-    try{ return await jsonpEvents(url, key, sheet); }
+    try{ return await jsonpEvents(url, key, sheet, action); }
     catch(e2){ return { error:'讀取失敗（瀏覽器安全限制擋下，且 JSONP 後備也失敗）：'+(e2&&e2.message||e2)+'。請確認 Apps Script 已重新部署且存取權為「任何人」。' }; }
   }
 }
@@ -3121,18 +3131,46 @@ async function setupAnalyticsUI(){
     trackKeyInput.addEventListener('change', ()=> saveShopStatsKey(trackKeyInput.value.trim()));
   }
 }
+// 意見回饋列表（全部 textContent，防訪客輸入 XSS）
+function anaFeedback(list){
+  const tb = document.getElementById('anaFbBody'); tb.innerHTML='';
+  document.getElementById('anaFbCount').textContent = '共 ' + list.length + ' 則（最新在前）';
+  if(list.length === 0){
+    const tr=document.createElement('tr'); tr.className='empty-row';
+    tr.innerHTML='<td colspan="5">尚無意見回饋</td>'; tb.appendChild(tr); return;
+  }
+  list.forEach(f=>{
+    const tr=document.createElement('tr');
+    let tm=''; try{ tm=new Date(f.t).toLocaleString('zh-TW',{hour12:false}); }catch(_){ tm=String(f.t||''); }
+    [tm, f.kind||'—', f.message||'', f.contact||'—', f.page||'—'].forEach((v,i)=>{
+      const td=document.createElement('td'); td.textContent=v;
+      if(i===2) td.style.cssText='white-space:pre-wrap;max-width:360px;';
+      tr.appendChild(td);
+    });
+    tb.appendChild(tr);
+  });
+}
 let _anaLoading=false;
-let _anaSheet='';   // ''＝商店主頁(visits)、'collection'＝個人收藏頁
+let _anaSheet='';   // ''＝商店主頁(visits)、'collection'＝個人收藏頁、'__feedback'＝意見回饋
 async function loadAnalytics(){
   const nc=document.getElementById('anaNotConfigured'), err=document.getElementById('anaError'), body=document.getElementById('anaBody');
+  const fbBody=document.getElementById('anaFeedbackBody');
   const url = await loadShopTrackUrl(), key = await loadShopStatsKey();
   nc.style.display='none'; err.style.display='none';
-  if(!url){ nc.style.display='block'; body.style.display='none'; document.getElementById('anaUpdated').textContent=''; return; }
+  if(!url){ nc.style.display='block'; body.style.display='none'; fbBody.style.display='none'; document.getElementById('anaUpdated').textContent=''; return; }
   if(_anaLoading) return; _anaLoading=true;
   document.getElementById('anaUpdated').textContent='讀取中…';
   try{
-    const res = await fetchEvents(url, key, _anaSheet);
-    if(!res || res.error){ err.textContent = (res && res.error) || '讀取失敗'; err.style.display='block'; body.style.display='none'; document.getElementById('anaUpdated').textContent=''; return; }
+    const isFb = _anaSheet === '__feedback';
+    const res = await fetchEvents(url, key, isFb ? '' : _anaSheet, isFb ? 'feedback' : 'events');
+    if(!res || res.error){ err.textContent = (res && res.error) || '讀取失敗'; err.style.display='block'; body.style.display='none'; fbBody.style.display='none'; document.getElementById('anaUpdated').textContent=''; return; }
+    if(isFb){
+      anaFeedback(Array.isArray(res.feedback) ? res.feedback : []);
+      body.style.display='none'; fbBody.style.display='block';
+      document.getElementById('anaUpdated').textContent = '更新於 ' + new Date().toLocaleTimeString('zh-TW',{hour12:false});
+      return;
+    }
+    fbBody.style.display='none';
     const stats = CDAnalytics.aggregateEvents(res.events, 30);
     document.getElementById('anaTotal').textContent = stats.total;
     document.getElementById('anaToday').textContent = stats.todayCount;
