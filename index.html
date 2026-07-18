@@ -353,6 +353,7 @@
         <div><label class="field">大類 Genre</label><input type="text" id="lstGenre" list="genreOptions" placeholder="可多個，逗號分隔"></div>
         <div><label class="field">子曲風 Sub-genre</label><input type="text" id="lstSub" list="subOptions" placeholder="可多個，逗號分隔"></div>
         <div><label class="field">備注</label><input type="text" id="lstNotes" placeholder="例如：near mint"></div>
+        <div><label class="field">圖片（選填）</label><div id="lstImgThumb" class="listing-thumb" title="點擊選擇圖片" style="width:56px;height:56px;">＋圖</div></div>
         <div class="platform-checks">
           <label><input type="checkbox" class="platform-check" value="Facebook Marketplace"> Facebook Marketplace</label>
           <label><input type="checkbox" class="platform-check" value="Yahoo拍賣"> Yahoo拍賣</label>
@@ -1566,6 +1567,33 @@ function auctionEnded(item){
   return new Date(item.auctionEnd) <= new Date();
 }
 
+// 新增上架商品時可先選一張圖片（暫存，按「新增上架」時才寫入該商品）
+let _lstPendingImg = null;
+function renderLstThumb(){
+  const t = document.getElementById('lstImgThumb'); if(!t) return;
+  t.innerHTML = '';
+  if(_lstPendingImg){
+    t.classList.add('has');
+    const im = document.createElement('img'); im.src = _lstPendingImg;
+    im.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+    t.appendChild(im); t.title = '點擊更換圖片';
+  } else {
+    t.classList.remove('has'); t.textContent = '＋圖'; t.title = '點擊選擇圖片';
+  }
+}
+(function(){
+  const t = document.getElementById('lstImgThumb'); if(!t) return;
+  t.addEventListener('click', ()=>{
+    const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*,.heic,.heif';
+    input.onchange = async ()=>{
+      const f = input.files && input.files[0]; if(!f) return;
+      const du = await fileToImageDataURL(f);
+      if(du){ _lstPendingImg = du; renderLstThumb(); }
+    };
+    input.click();
+  });
+})();
+
 document.getElementById('addListingBtn').addEventListener('click', async ()=>{
   const artist = document.getElementById('lstArtist').value.trim();
   const album = document.getElementById('lstAlbum').value.trim();
@@ -1584,12 +1612,15 @@ document.getElementById('addListingBtn').addEventListener('click', async ()=>{
 
   if(!artist && !album){ await uiAlert('請至少輸入藝人或專輯名稱'); return; }
 
+  const newId = genId();
+  if(_lstPendingImg){ await imgSet(newId, _lstPendingImg); }   // 先寫圖片，hasImage 才正確
   listings.push({
-    id: genId(), artist, album, price, cost, source, notes, platforms,
+    id: newId, artist, album, price, cost, source, notes, platforms,
     regions, genres, subgenres,
-    biddingType, auctionEnd, sideLabel,
+    biddingType, auctionEnd, sideLabel, hasImage: !!_lstPendingImg,
     status: '在售', dateAdded: todayStr()
   });
+  _lstPendingImg = null; renderLstThumb();
   await saveKey('listings', listings);
   refreshTaxonomyDatalists();
 
@@ -2627,6 +2658,7 @@ async function applyBackupObject(data, mode){
   await saveKey('listings', listings);
   await saveKey('orders', orders);
   await saveKey('archive', archive);
+  renderTodoBanner();   // 匯入/同步進來的新資料，今日待辦立刻重算
   return { restoredImgs };
 }
 
