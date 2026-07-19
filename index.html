@@ -407,7 +407,9 @@
         <select id="filterStatus" class="status-select" title="依狀態篩選"><option value="">狀態：全部</option><option value="在售">在售</option><option value="保留中">保留中</option><option value="已售出">已售出</option><option value="已下架">已下架</option></select>
         <select id="filterPlatform" class="status-select" title="依上架平台篩選"><option value="">平台：全部</option><option value="Facebook Marketplace">Facebook Marketplace</option><option value="Yahoo拍賣">Yahoo拍賣</option><option value="旋轉拍賣">旋轉拍賣</option><option value="Discogs">Discogs</option><option value="Threads">Threads</option><option value="Instagram">Instagram</option><option value="__none__">未設定平台</option></select>
         <select id="filterSource" class="status-select" title="依貨源篩選"><option value="">貨源：全部</option></select>
-        <select id="filterGenre" class="status-select" title="依曲風篩選"><option value="">曲風：全部</option></select>
+        <select id="filterRegion" class="status-select" title="依地區／語言篩選" style="max-width:132px;"><option value="">地區：全部</option></select>
+        <select id="filterGenre" class="status-select" title="依大類 Genre 篩選" style="max-width:132px;"><option value="">大類：全部</option></select>
+        <select id="filterSub" class="status-select" title="依子曲風 Sub-genre 篩選" style="max-width:132px;"><option value="">子曲風：全部</option></select>
         <button class="ghost" id="clearFiltersBtn" style="display:none;">✕ 清除篩選</button>
         <label class="check-row" style="margin:0;"><input type="checkbox" id="selectAllListings"> 全選</label>
         <span class="muted-small" id="selectedCountLabel">已選取 0 筆</span>
@@ -675,13 +677,15 @@ const BID_TYPES = ['競標', '直購'];
 
 // 三軸曲風分類（Discogs 式）：地區/語言、大類 Genre、子曲風 Sub-genre。皆受控清單可自訂複選。
 const REGION_OPTIONS = ['華語', '台語', '粵語', '西洋', '日本', '韓國', '其他'];
-const GENRE_OPTIONS  = ['Pop', 'Rock', 'Electronic', 'Hip-Hop/R&B', 'Jazz', 'Classical', 'Folk/Country', 'Soundtrack', 'Enka/Traditional', 'Other'];
-// 大類改英文：把既有中文值一次性換成英文（只換完全相符的已知標籤，自訂值不動）
+const GENRE_OPTIONS  = ['Pop', 'Rock', 'Metal', 'Electronic', 'Hip-Hop/R&B', 'Jazz', 'Classical', 'Folk/Country', 'Soundtrack/Stage', 'Enka/Traditional', 'Other'];
+// 大類正規化：舊中文值換成英文；並把已更名的舊英文值(Soundtrack→Soundtrack/Stage)一併遷移。
+// 只換完全相符的已知標籤，自訂值不動。
 const GENRE_ZH_TO_EN = {
-  '流行':'Pop', '搖滾':'Rock', '電子':'Electronic', '嘻哈/R&B':'Hip-Hop/R&B', '嘻哈':'Hip-Hop/R&B',
+  '流行':'Pop', '搖滾':'Rock', '金屬':'Metal', '電子':'Electronic', '嘻哈/R&B':'Hip-Hop/R&B', '嘻哈':'Hip-Hop/R&B',
   'R&B':'Hip-Hop/R&B', '爵士':'Jazz', '古典':'Classical', '民謠/鄉村':'Folk/Country',
-  '民謠':'Folk/Country', '鄉村':'Folk/Country', '原聲帶':'Soundtrack', '演歌/傳統':'Enka/Traditional',
-  '演歌':'Enka/Traditional', '傳統':'Enka/Traditional', '其他':'Other'
+  '民謠':'Folk/Country', '鄉村':'Folk/Country', '原聲帶':'Soundtrack/Stage', '演歌/傳統':'Enka/Traditional',
+  '演歌':'Enka/Traditional', '傳統':'Enka/Traditional', '其他':'Other',
+  'Soundtrack':'Soundtrack/Stage'
 };
 // 把一個標籤陣列裡的已知中文大類換成英文並去重；回傳是否有變動。
 function _mapGenresToEn(arr){
@@ -1732,7 +1736,9 @@ function getFilteredListings(){
   const fStatus = document.getElementById('filterStatus').value;
   const fPlatform = document.getElementById('filterPlatform').value;
   const fSource = document.getElementById('filterSource').value;
+  const fRegion = document.getElementById('filterRegion').value;
   const fGenre = document.getElementById('filterGenre').value;
+  const fSub = document.getElementById('filterSub').value;
   return listings.filter(l=>{
     // 已完成訂單（封存）的商品從上架清單隱藏，避免賣完的商品一直卡著
     if(l.archived) return false;
@@ -1741,8 +1747,10 @@ function getFilteredListings(){
     if(fPlatform === '__none__'){ if(l.platforms && l.platforms.length) return false; }
     else if(fPlatform && !(l.platforms||[]).includes(fPlatform)) return false;
     if(fSource && (l.source||'') !== fSource) return false;
-    // 曲風篩選：跨三軸（地區/大類/子曲風）任一命中即算
-    if(fGenre && [].concat(l.regions||[], l.genres||[], l.subgenres||[]).indexOf(fGenre) === -1) return false;
+    // 三軸各自獨立篩選（可疊加）
+    if(fRegion && (l.regions||[]).indexOf(fRegion) === -1) return false;
+    if(fGenre && (l.genres||[]).indexOf(fGenre) === -1) return false;
+    if(fSub && (l.subgenres||[]).indexOf(fSub) === -1) return false;
     return true;
   });
 }
@@ -1757,28 +1765,28 @@ function refreshFilterOptions(){
     values.forEach(v=> sel.appendChild(optionEl(v, v, current)));
     if(values.includes(current)) sel.value = current;
   })();
-  // 曲風：三軸值聯集
-  (function(){
-    const sel = document.getElementById('filterGenre'); const current = sel.value;
+  // 三軸各自建立選項（只列該軸實際用到的值）
+  [['filterRegion','regions','地區'], ['filterGenre','genres','大類'], ['filterSub','subgenres','子曲風']].forEach(([selId, key, label])=>{
+    const sel = document.getElementById(selId); const current = sel.value;
     const set = {};
-    listings.forEach(l=>{ [].concat(l.regions||[], l.genres||[], l.subgenres||[]).forEach(v=>{ v=(v||'').trim(); if(v) set[v]=1; }); });
+    listings.forEach(l=>{ (l[key]||[]).forEach(v=>{ v=(v||'').trim(); if(v) set[v]=1; }); });
     const values = Object.keys(set).sort();
-    sel.innerHTML = ''; sel.appendChild(optionEl('', '曲風：全部'));
+    sel.innerHTML = ''; sel.appendChild(optionEl('', label + '：全部'));
     values.forEach(v=> sel.appendChild(optionEl(v, v, current)));
     if(values.includes(current)) sel.value = current;
-  })();
-  const anyActive = ['filterStatus','filterPlatform','filterSource','filterGenre'].some(id=>document.getElementById(id).value)
+  });
+  const anyActive = ['filterStatus','filterPlatform','filterSource','filterRegion','filterGenre','filterSub'].some(id=>document.getElementById(id).value)
     || document.getElementById('listingSearch').value.trim() !== '';
   document.getElementById('clearFiltersBtn').style.display = anyActive ? 'inline-block' : 'none';
 }
 
 document.getElementById('listingSearch').addEventListener('input', renderListings);
-['filterStatus','filterPlatform','filterSource','filterGenre'].forEach(id=>{
+['filterStatus','filterPlatform','filterSource','filterRegion','filterGenre','filterSub'].forEach(id=>{
   document.getElementById(id).addEventListener('change', renderListings);
 });
 document.getElementById('clearFiltersBtn').addEventListener('click', ()=>{
   document.getElementById('listingSearch').value = '';
-  ['filterStatus','filterPlatform','filterSource','filterGenre'].forEach(id=>{ document.getElementById(id).value = ''; });
+  ['filterStatus','filterPlatform','filterSource','filterRegion','filterGenre','filterSub'].forEach(id=>{ document.getElementById(id).value = ''; });
   renderListings();
 });
 
