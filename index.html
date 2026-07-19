@@ -186,6 +186,20 @@
     <div class="modal-actions" id="modalActions"></div>
   </div>
 </div>
+<div class="modal-overlay" id="pickOverlay">
+  <div class="modal-box" style="max-width:560px;">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:4px;">
+      <h3 style="margin:0;font-size:17px;color:var(--gold);font-weight:600;">揀貨明細</h3>
+      <span class="muted-small" id="pickMeta"></span>
+    </div>
+    <div class="muted-small" style="margin-bottom:10px;">備貨時可勾選核對（勾選僅供對照，不會儲存）</div>
+    <div id="pickBody" style="max-height:52vh;overflow:auto;"></div>
+    <div id="pickTotal" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:13.5px;"></div>
+    <div class="modal-actions" style="margin-top:14px;">
+      <button class="primary" id="pickClose" style="font-size:14px;padding:9px 20px;">關閉</button>
+    </div>
+  </div>
+</div>
 <div class="wrap">
 
   <header>
@@ -2330,6 +2344,59 @@ function makeSelect(options, value, onChange, allowBlank){
   return sel;
 }
 
+// 揀貨明細彈窗：把一筆訂單的商品逐項列出，備貨時可勾選核對（全 textContent，防注入）
+const pickOverlayEl = document.getElementById('pickOverlay');
+function closePickModal(){ pickOverlayEl.classList.remove('show'); }
+document.getElementById('pickClose').addEventListener('click', closePickModal);
+pickOverlayEl.addEventListener('click', (e)=>{ if(e.target === pickOverlayEl) closePickModal(); });
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && pickOverlayEl.classList.contains('show')) closePickModal(); });
+
+function openPickModal(order){
+  const meta = [order.buyer, order.date, order.orderNo].filter(Boolean).join('　');
+  document.getElementById('pickMeta').textContent = meta;
+  const body = document.getElementById('pickBody'); body.innerHTML = '';
+
+  const items = Array.isArray(order.items) ? order.items : null;
+  // 沒有明細快照的舊訂單：退回用「訂單內容」文字拆行，至少能逐項核對
+  const rows = items
+    ? items.map(it => ({ name: it.name || '', source: it.source || '', price: it.price }))
+    : String(order.content || '').split(/[、,]/).map(s=>s.trim()).filter(Boolean).map(n => ({ name:n, source:'', price:null }));
+
+  if(rows.length === 0){
+    const p = document.createElement('div'); p.className = 'muted-small'; p.textContent = '這筆訂單沒有商品明細。';
+    body.appendChild(p);
+  }
+  rows.forEach((r, i)=>{
+    const line = document.createElement('label');
+    line.style.cssText = 'display:flex;align-items:flex-start;gap:9px;padding:9px 4px;border-bottom:1px solid #23252f;cursor:pointer;';
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.style.cssText = 'margin-top:3px;flex-shrink:0;';
+    cb.addEventListener('change', ()=>{ line.style.opacity = cb.checked ? '0.45' : '1'; });
+    const num = document.createElement('span');
+    num.textContent = (i+1) + '.'; num.style.cssText = 'color:var(--text-muted);min-width:22px;flex-shrink:0;font-size:13px;';
+    const mid = document.createElement('div'); mid.style.cssText = 'flex:1;min-width:0;';
+    const nm = document.createElement('div'); nm.textContent = r.name || '(未命名)'; nm.style.cssText = 'font-size:14px;line-height:1.45;';
+    mid.appendChild(nm);
+    if(r.source){
+      const src = document.createElement('div'); src.className = 'muted-small';
+      src.textContent = '貨源：' + r.source; mid.appendChild(src);
+    }
+    line.appendChild(cb); line.appendChild(num); line.appendChild(mid);
+    if(r.price != null && r.price !== ''){
+      const pr = document.createElement('span');
+      pr.textContent = fmtMoney(r.price);
+      pr.style.cssText = 'color:var(--gold);font-family:"JetBrains Mono",monospace;font-size:13.5px;flex-shrink:0;';
+      line.appendChild(pr);
+    }
+    body.appendChild(line);
+  });
+
+  const sum = items ? items.reduce((s,it)=> s + (parseFloat(it.price)||0), 0) : null;
+  document.getElementById('pickTotal').textContent =
+    `共 ${rows.length} 件` + (sum != null ? `　商品合計 ${fmtMoney(sum)}` : '')
+    + (order.amount ? `　訂單金額 ${fmtMoney(order.amount)}` : '');
+  pickOverlayEl.classList.add('show');
+}
+
 function renderOrders(){
   const tbody = document.getElementById('ordersBody'); tbody.innerHTML = '';
   if(orders.length === 0){
@@ -2343,7 +2410,18 @@ function renderOrders(){
     const tdDate = document.createElement('td'); tdDate.appendChild(makeDateInput(order.date, v=>{ order.date=v; persist(); })); tr.appendChild(tdDate);
     const tdSource = document.createElement('td'); tdSource.appendChild(makeSelect(PLATFORMS, order.source, v=>{ order.source=v; persist(); }, true)); tr.appendChild(tdSource);
     const tdBuyer = document.createElement('td'); tdBuyer.appendChild(makeTextInput(order.buyer, v=>{ order.buyer=v; persist(); })); tr.appendChild(tdBuyer);
-    const tdContent = document.createElement('td'); tdContent.appendChild(makeTextInput(order.content, v=>{ order.content=v; persist(); }, true)); tr.appendChild(tdContent);
+    const tdContent = document.createElement('td');
+    const contentWrap = document.createElement('div');
+    contentWrap.style.cssText = 'display:flex;align-items:center;gap:6px;';
+    contentWrap.appendChild(makeTextInput(order.content, v=>{ order.content=v; persist(); }, true));
+    const pickBtn = document.createElement('button');
+    pickBtn.className = 'small-icon'; pickBtn.type = 'button';
+    pickBtn.textContent = '📋'; pickBtn.title = '顯示揀貨明細';
+    pickBtn.setAttribute('aria-label', '顯示揀貨明細');
+    pickBtn.style.flexShrink = '0';
+    pickBtn.addEventListener('click', ()=> openPickModal(order));
+    contentWrap.appendChild(pickBtn);
+    tdContent.appendChild(contentWrap); tr.appendChild(tdContent);
     const tdAmount = document.createElement('td'); tdAmount.appendChild(makeNumberInput(order.amount, v=>{ order.amount=v; persist(); updateOrderStats(); })); tr.appendChild(tdAmount);
     const tdCost = document.createElement('td'); tdCost.appendChild(makeNumberInput(order.totalCost, v=>{ order.totalCost = (v===''?'':(parseFloat(v)||0)); persist(); })); tr.appendChild(tdCost);
     const tdShipping = document.createElement('td');
