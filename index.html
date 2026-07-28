@@ -423,7 +423,7 @@
       <div class="relist-panel" id="relistPanel">
         <div style="font-weight:700;margin-bottom:10px;color:var(--gold);">批量重新上架</div>
         <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));">
-          <div><label class="field">新標價（留空則保留原價）</label><input type="number" id="relistPrice" min="0"></div>
+          <div><label class="field">新標價（留空則不修改）</label><input type="number" id="relistPrice" min="0"></div>
           <div class="platform-checks" style="grid-column:1/-1;">
             <label><input type="checkbox" class="relist-platform-check" value="Facebook Marketplace"> Facebook Marketplace</label>
             <label><input type="checkbox" class="relist-platform-check" value="Yahoo拍賣"> Yahoo拍賣</label>
@@ -965,6 +965,15 @@ function todayStr(){
 function fmtMoney(n){
   const num = parseFloat(n);
   return 'NT$' + (isNaN(num) ? 0 : num).toLocaleString('en-US');
+}
+// 特價折數（%）。必須與 shop-template.html 的 discountPct 完全同規則：
+// 用 + 而非 parseFloat（'1,200' 會被 parseFloat 讀成 1，算出假折扣）、
+// 分子先整數乘（避免浮點把剛好 10% 算成 9%）、無條件捨去（寧可少寫不可誇大）。
+function listingDiscountPct(l){
+  if(!l) return 0;
+  const p = +l.price, o = +l.origPrice;
+  if(!(p > 0) || !(o > p)) return 0;
+  return Math.floor(((o - p) * 100) / o);
 }
 function formatName(artist, album){
   const a = (artist||'').trim(); const b = (album||'').trim();
@@ -1882,22 +1891,49 @@ function renderListings(){
     }
     tr.appendChild(tdName);
 
-    // Price cell — editable inline once an auction has ended
+    // Price cell — 標價永遠可直接改；已截標的競標另有金框提示（配合今日待辦的「待填得標價」動線）
     const tdPrice = document.createElement('td');
+    let paintOff = ()=>{};
+    const priceInput = document.createElement('input');
+    priceInput.type = 'number'; priceInput.min = '0'; priceInput.className = 'cell-amount';
+    priceInput.value = item.price || '';
+    priceInput.placeholder = '標價';
     if(ended(item)){
-      const priceInput = document.createElement('input');
-      priceInput.type = 'number'; priceInput.min = '0'; priceInput.className = 'cell-amount';
-      priceInput.value = item.price || '';
       priceInput.title = '競標已截止，可填入得標價';
       priceInput.style.borderColor = 'var(--gold-deep)';
-      priceInput.addEventListener('change', async ()=>{
-        item.price = priceInput.value;
+    }
+    priceInput.addEventListener('change', async ()=>{
+      item.price = priceInput.value;
+      await saveKey('listings', listings);
+      updateListingStats();
+      paintOff();          // 標價一改，折數標示要跟著重算（不重繪整表，免得游標跳走）
+    });
+    tdPrice.appendChild(priceInput);
+    // 「原價」只出現在真的會被發布的列；其他狀態填了也不會生效，不如不給欄位。
+    if(item.biddingType !== '競標' && (item.status === '在售' || item.status === '保留中')){
+      const origWrap = document.createElement('div');
+      origWrap.style.cssText = 'margin-top:4px;display:flex;align-items:center;gap:4px;';
+      const origInput = document.createElement('input');
+      origInput.type = 'number'; origInput.min = '0'; origInput.className = 'cell-amount';
+      origInput.value = item.origPrice || '';
+      origInput.placeholder = '原價';
+      origInput.title = '原價（商品頁的劃線價）。要高於標價才會顯示特價；清空即取消特價。';
+      const offLabel = document.createElement('span');
+      offLabel.style.cssText = 'font-size:11px;white-space:nowrap;';
+      paintOff = ()=>{
+        const off = listingDiscountPct(item);
+        if(off >= 1){ offLabel.textContent = '-' + off + '%'; offLabel.style.color = 'var(--danger)'; }
+        else if(String(item.origPrice || '') !== ''){ offLabel.textContent = '不顯示'; offLabel.style.color = 'var(--text-muted)'; }
+        else { offLabel.textContent = ''; }
+      };
+      origInput.addEventListener('change', async ()=>{
+        item.origPrice = origInput.value;
         await saveKey('listings', listings);
-        updateListingStats();
+        paintOff();
       });
-      tdPrice.appendChild(priceInput);
-    } else {
-      tdPrice.textContent = item.price ? fmtMoney(item.price) : '—';
+      paintOff();
+      origWrap.appendChild(origInput); origWrap.appendChild(offLabel);
+      tdPrice.appendChild(origWrap);
     }
     tr.appendChild(tdPrice);
 
@@ -2075,7 +2111,9 @@ document.getElementById('confirmRelistBtn').addEventListener('click', async ()=>
 
   listings.forEach(item=>{
     if(!selectedListingIds.has(item.id)) return;
-    if(newPrice !== '') item.price = newPrice;
+    // 重新上架＝重新開價（dateAdded 也重設成今天），舊的特價原價不該跟著沿用，
+    // 否則整批商品會冒出沒人授權的折扣標籤。這個面板看不到原價欄，所以必須主動清。
+    if(newPrice !== ''){ item.price = newPrice; item.origPrice = ''; }
     item.platforms = newPlatforms;
     item.status = '在售';
     item.dateAdded = todayStr();
@@ -2164,7 +2202,11 @@ document.getElementById('confirmEditBtn').addEventListener('click', async ()=>{
 
   listings.forEach(item=>{
     if(!selectedListingIds.has(item.id)) return;
+    // 只有「標價真的被改動」才清掉特價原價。不能只看欄位非空——單選時 edtPrice 會
+    // 預先帶入原值（見 openEditPanel），那樣改個備註也會把特價一起清掉。
+    const priceChanged = fields.price !== '' && String(fields.price) !== String(item.price || '');
     Object.keys(fields).forEach(k=>{ if(fields[k] !== '') item[k] = fields[k]; });
+    if(priceChanged) item.origPrice = '';
     if(taxRegionRaw !== '') item.regions = parseTags(taxRegionRaw);
     if(taxGenreRaw !== '') item.genres = parseTags(taxGenreRaw);
     if(taxSubRaw !== '') item.subgenres = parseTags(taxSubRaw);
@@ -2870,9 +2912,9 @@ async function saveGhToken(v){ await saveKey('ghToken', [v || '']); }
 // 蒐集要發布的內容。注意：手機端 promo/intro 的輸入框是隱藏的（值為空），
 // 若直接讀輸入框會把商店的公告與介紹清空 → 非 native 一律從儲存讀取。
 async function buildPublishPayload(){
-  const forSale = listings.filter(l => (l.status === '在售' || l.status === '保留中') && l.biddingType !== '競標');
+  const forSale = listings.filter(l => (l.status === '在售' || l.status === '保留中') && l.biddingType !== '競標' && !l.archived);
   const items = forSale.map(l => ({
-    id: l.id, artist: l.artist, album: l.album, price: l.price,
+    id: l.id, artist: l.artist, album: l.album, price: l.price, origPrice: l.origPrice || '',
     genre: l.genre, notes: l.notes, sideLabel: l.sideLabel, hasImage: !!l.hasImage,
     regions: Array.isArray(l.regions) ? l.regions : [],
     genres: Array.isArray(l.genres) ? l.genres : [],
