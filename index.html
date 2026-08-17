@@ -414,6 +414,7 @@
         <label class="check-row" style="margin:0;"><input type="checkbox" id="selectAllListings"> 全選</label>
         <span class="muted-small" id="selectedCountLabel">已選取 0 筆</span>
         <button class="primary" id="createOrderBtn" style="font-size:14px;padding:8px 18px;">成立訂單</button>
+        <button class="secondary" id="addToOrderBtn" title="把勾選的商品加進一筆進行中的訂單（客人加購時用）">加入現有訂單</button>
         <button class="secondary" id="loadToComposerBtn">帶回看板重新產生圖文</button>
         <button class="secondary" id="batchEditBtn">編輯選取項目</button>
         <button class="secondary" id="batchRelistBtn">批量重新上架</button>
@@ -2303,6 +2304,108 @@ document.getElementById('createOrderBtn').addEventListener('click', async ()=>{
   orderPanel.classList.add('show');
   orderPanel.scrollIntoView({behavior:'smooth', block:'center'});
 });
+// 加購用：從進行中訂單裡選一筆。沿用既有的 #modalOverlay，不另開彈窗。
+function uiPickOrder(message, list){
+  return new Promise(resolve=>{
+    const overlay = document.getElementById('modalOverlay');
+    const box = overlay.querySelector('.modal-box');
+    const actions = document.getElementById('modalActions');
+    document.getElementById('modalMsg').textContent = message;
+    actions.innerHTML = '';
+    const sel = document.createElement('select');
+    sel.className = 'status-select';
+    sel.style.cssText = 'width:100%;margin-bottom:18px;';
+    list.forEach(o=>{
+      const c = String(o.content || '').trim();
+      const tail = c ? '　｜ ' + (c.length > 40 ? c.slice(0, 40) + '…' : c) : '';
+      sel.appendChild(optionEl(o.id, (o.date || '(無日期)') + '　' + (o.buyer || '(未填買家)') + tail));
+    });
+    box.insertBefore(sel, actions);
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'ghost'; cancelBtn.textContent = '取消';
+    const okBtn = document.createElement('button');
+    okBtn.className = 'primary'; okBtn.style.cssText = 'font-size:14px;padding:9px 20px;'; okBtn.textContent = '下一步';
+    const close = (val)=>{ overlay.classList.remove('show'); sel.remove(); resolve(val); };
+    cancelBtn.addEventListener('click', ()=>close(null));
+    okBtn.addEventListener('click', ()=>close(sel.value));
+    actions.appendChild(cancelBtn); actions.appendChild(okBtn);
+    overlay.classList.add('show');
+  });
+}
+
+// 客人加購：把勾選的商品併進一筆進行中的訂單。
+// 刻意複用上架清單既有的搜尋/篩選/勾選（selectedListingIds），不另做一套選商品 UI。
+document.getElementById('addToOrderBtn').addEventListener('click', async ()=>{
+  if(selectedListingIds.size === 0){ await uiAlert('請先在上架清單勾選要加購的商品'); return; }
+  if(orders.length === 0){ await uiAlert('目前沒有進行中的訂單，請改用「成立訂單」。'); return; }
+  const picked = listings.filter(l => selectedListingIds.has(l.id));
+
+  // 一件商品只能屬於一筆訂單：否則兩張揀貨單都會叫你出同一片，
+  // 依貨源毛利也會把它重複計算。
+  const claimedBy = new Map();
+  orders.forEach(o => (o.items || []).forEach(it => { if(it.id) claimedBy.set(it.id, o); }));
+
+  const orderId = await uiPickOrder(`要把勾選的 ${picked.length} 件商品加入哪一筆訂單？`, orders);
+  if(!orderId) return;
+  const order = orders.find(o => o.id === orderId);
+  if(!order) return;
+
+  const inThis = picked.filter(l => claimedBy.get(l.id) === order);
+  const inOther = picked.filter(l => claimedBy.has(l.id) && claimedBy.get(l.id) !== order);
+  const add = picked.filter(l => !claimedBy.has(l.id));
+  if(add.length === 0){
+    await uiAlert('沒有可加入的商品：' + (inThis.length ? `${inThis.length} 件已在這筆訂單裡。` : '') +
+      (inOther.length ? `${inOther.length} 件已屬於其他訂單。` : ''));
+    return;
+  }
+
+  const newItems = add.map(l => ({
+    id: l.id, name: formatName(l.artist, l.album),
+    price: parseFloat(l.price) || 0,
+    cost: parseFloat(l.cost) || 0,
+    source: l.source || ''
+  }));
+  const addAmount = newItems.reduce((s, i) => s + i.price, 0);
+  const addCost = newItems.reduce((s, i) => s + i.cost, 0);
+  // 實際資料裡 order.amount 全是「字串」（'1250'），直接 + 會變字串串接，所以一律先 parseFloat。
+  const curAmount = parseFloat(order.amount) || 0;
+  const curCost = parseFloat(order.totalCost);
+
+  const skipped = [];
+  if(inThis.length) skipped.push(`${inThis.length} 件已在這筆`);
+  if(inOther.length) skipped.push(`${inOther.length} 件已屬於其他訂單`);
+  let msg = `加入 ${add.length} 件到「${order.buyer || '未填買家'}」：\n`
+    + add.map(l => '・' + formatName(l.artist, l.album)).join('\n')
+    + `\n\n金額　${fmtMoney(curAmount)} → ${fmtMoney(curAmount + addAmount)}`;
+  msg += isFinite(curCost)
+    ? `\n成本　${fmtMoney(curCost)} → ${fmtMoney(curCost + addCost)}`
+    : `\n成本　這筆訂單原本沒有成本資料，維持空白（補上只有加購這幾件的成本，毛利報表會算出假數字）`;
+  if(skipped.length) msg += `\n\n（略過：${skipped.join('、')}）`;
+  if(!(await uiConfirm(msg))) return;
+
+  const hadItems = Array.isArray(order.items) && order.items.length > 0;
+  order.items = (order.items || []).concat(newItems);
+  if(hadItems){
+    // 由 items 重算，不對 content 做字串增刪——品名可能含「、」、可能重名、
+    // 也可能被手動改過，字串手術會刪錯或刪不掉。
+    order.content = order.items.map(it => it.name).join('、');
+  } else {
+    // 沒有明細快照的舊訂單：content 是原有商品的唯一紀錄，只能追加不能重算，
+    // 否則會把原本那幾件洗掉。
+    const base = String(order.content || '').trim();
+    const names = newItems.map(it => it.name).join('、');
+    order.content = base ? base + '、' + names : names;
+  }
+  order.amount = String(curAmount + addAmount);
+  if(isFinite(curCost)) order.totalCost = curCost + addCost;
+  add.forEach(l => { l.status = '已售出'; });
+
+  await saveKey('orders', orders);
+  await saveKey('listings', listings);
+  selectedListingIds.clear();
+  renderListings(); renderOrders(); updateOrderStats();
+});
+
 // 選「面交」時才顯示面交時間/地點欄
 function updateMeetFields(){
   const show = document.getElementById('orderShippingSel').value === '面交';
