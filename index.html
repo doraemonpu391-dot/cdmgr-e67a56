@@ -232,6 +232,16 @@
       <div id="socialsList"></div>
       <button class="ghost" id="addSocialBtn" type="button" style="margin-top:4px;">＋ 新增社群連結</button>
     </div>
+    <div id="shipRow" style="display:none;margin-top:12px;">
+      <label class="field" style="display:block;font-size:12px;color:var(--teal);margin-bottom:4px;">運送方式與運費：運費只用來在成立訂單時算「免運」要折多少，<b>不會發布到公開商品頁</b>。取消勾選「前台可選」的方式，客人在商品頁選不到（但你後台仍可用）。名稱不可改。</label>
+      <div id="shipList"></div>
+    </div>
+    <div id="promoRulesRow" style="display:none;margin-top:12px;">
+      <label class="field" style="display:block;font-size:12px;color:var(--teal);margin-bottom:4px;">優惠規則：讀法就是「<b>每／滿 ◯ 件／元 → 折 ◯ 元／打 ◯ 折／免運</b>」。可加多條，勾選才生效；活動結束把勾勾關掉即可，規則會留著下次再用。改完按「發布商品頁」才更新前台。</label>
+      <div id="promoList"></div>
+      <button class="ghost" id="addPromoBtn" type="button" style="margin-top:4px;">＋ 新增優惠規則</button>
+      <div id="promoPreview" class="muted-small" style="margin-top:6px;"></div>
+    </div>
     <div id="collectionRow" style="display:none;margin-top:12px;">
       <label class="field" style="display:block;font-size:12px;color:var(--teal);margin-bottom:4px;">個人收藏頁（/collection）連動的 Google 試算表：貼<b>網址或 ID</b>。日後要遷移到別的試算表時改這裡，按「發布商品頁」後生效。留空則用目前預設。</label>
       <input type="text" id="shopCollectionInput" placeholder="https://docs.google.com/spreadsheets/d/…/edit　或直接貼試算表 ID" style="width:100%;background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;">
@@ -670,7 +680,67 @@
 // ---------------------------------------------------------------
 const SLOTS = 9;
 const PLATFORMS = ['Facebook Marketplace', 'Yahoo拍賣', '旋轉拍賣', 'Discogs', 'Threads', 'Instagram'];
+// 運送方式與運費。名稱刻意「不可編輯」——'面交' 在下面 6 處被字串比對（面交時間/地點欄、
+// 今日面交待辦），改名會讓那些功能靜默失效。只有運費與「前台可選」可以改。
+// 運費只用在後台算免運折抵，絕不發布到公開 catalog。
+const SHIP_DEFAULTS = [
+  { name: '7-11店到店', fee: 60, pub: true },
+  { name: '全家店到店', fee: 60, pub: true },
+  { name: '賣貨便',     fee: 38, pub: true },
+  { name: '面交',       fee: 0,  pub: true },
+  { name: '郵寄',       fee: '', pub: false }   // 運費看數量，每次自填；先不公開
+];
+let shipMethods = SHIP_DEFAULTS.map(m => Object.assign({}, m));
+function shipFeeOf(name){
+  const m = shipMethods.find(x => x.name === name);
+  return m ? (Number(m.fee) || 0) : 0;
+}
+// 訂單面板/訂單表的下拉一律吃這個（含不公開的郵寄）
+function shippingMethodNames(){ return shipMethods.map(m => m.name); }
 const SHIPPING_METHODS = ['7-11店到店', '全家店到店', '賣貨便', '面交'];
+
+// ---- 優惠規則 ----
+// 一條規則＝「[每|滿] N [件|元] → [折 M 元 | 打 X 折 | 免運]」。
+// 門檻一律用「原始小計／原始件數」判定，所以多條規則之間沒有先後順序問題。
+const PROMO_DEFAULTS = [
+  { on: true, name: '長期優惠', mode: 'every',   metric: 'qty',   n: 3,    kind: 'amount',   value: 50 },
+  { on: true, name: '滿額免運', mode: 'atLeast', metric: 'money', n: 2000, kind: 'freeship', value: 0  }
+];
+let promoRules = PROMO_DEFAULTS.map(r => Object.assign({}, r));
+
+// 折扣計算。**與 shop-template.html 的 computePromo 必須完全同規則**，改一邊要改兩邊。
+// 全部數值強制轉型：設定欄位存的是 input.value（字串），沒轉型的話 discount += fee
+// 會變成字串串接（'50'+'60'='5060'），折扣直接超過小計 → 整筆訂單免費。
+function computePromo(qty, subtotal, rules, shipFee){
+  const q = Number(qty) || 0, sub = Number(subtotal) || 0, fee = Number(shipFee) || 0;
+  const out = { discount: 0, freeShip: false, lines: [] };
+  (Array.isArray(rules) ? rules : []).forEach(function(r){
+    if(!r || !r.on) return;
+    const n = Number(r.n);
+    if(!isFinite(n) || n <= 0) return;                 // n=0 會讓 floor(x/0)=Infinity
+    const base = (r.metric === 'qty') ? q : sub;
+    // 打折與免運只能套用一次；「每」只對「折固定金額」有意義
+    const times = (r.mode === 'every' && r.kind === 'amount') ? Math.floor(base / n) : (base >= n ? 1 : 0);
+    if(times <= 0) return;
+    let amt = 0;
+    if(r.kind === 'amount'){ amt = (Number(r.value) || 0) * times; }
+    else if(r.kind === 'percent'){
+      const x = Number(r.value) || 0;
+      if(x <= 0 || x >= 10) return;                    // 打0折=免費、打10折=沒折，都是設定錯誤
+      amt = Math.round(sub * (10 - x) / 10);
+    }
+    else if(r.kind === 'freeship'){
+      if(out.freeShip) return;      // 運費只有一筆，多條免運規則同時成立也只能折一次
+      amt = fee; out.freeShip = true;
+    }
+    if(amt <= 0 && r.kind !== 'freeship') return;
+    out.discount += amt;
+    out.lines.push({ name: String(r.name || '優惠'), amount: amt, times: times, kind: r.kind });
+  });
+  // 夾住上下界：沒有 max(0) 的話設定錯誤會算出負折扣→反而向客人多收錢
+  out.discount = Math.max(0, Math.min(out.discount, sub));
+  return out;
+}
 const SHIP_STATUSES = ['待出貨', '已出貨', '問題件'];
 const PAYMENT_STATUSES = ['未付款', '已付款'];
 const LISTING_STATUSES = ['在售', '保留中', '已售出', '已下架'];
@@ -2288,14 +2358,14 @@ document.getElementById('createOrderBtn').addEventListener('click', async ()=>{
   });
 
   populateSelect(document.getElementById('orderSourceSel'), PLATFORMS, true);
-  populateSelect(document.getElementById('orderShippingSel'), SHIPPING_METHODS, true);
+  populateSelect(document.getElementById('orderShippingSel'), shippingMethodNames(), true);
   populateSelect(document.getElementById('orderPaymentSel'), PAYMENT_STATUSES, false);
   document.getElementById('orderDate').value = todayStr();
   document.getElementById('orderBuyer').value = '';
   document.getElementById('orderNoInput').value = '';
-  document.getElementById('orderAmount').value = total || '';
+  _orderSubtotal = total; _orderQty = selected.length; _orderAutoAmount = null;   // 面板重開＝重新自動填
+  applyOrderPromo();                       // 依目前運送方式算出折扣並填入金額
   document.getElementById('orderCost').value = costTotal || '';
-  document.getElementById('orderDiscount').value = '';
   document.getElementById('orderNotesInput').value = '';
   document.getElementById('orderMeetAt').value = '';
   document.getElementById('orderMeetPlace').value = '';
@@ -2406,12 +2476,29 @@ document.getElementById('addToOrderBtn').addEventListener('click', async ()=>{
   renderListings(); renderOrders(); updateOrderStats();
 });
 
+// 成立訂單面板的折扣自動套用。免運要知道運送方式才算得出來，所以放在這裡而不是前台。
+// 運費本身不進 order.amount——毛利是 amount − 成本，把代收轉付的運費算進去會讓每筆毛利虛增。
+let _orderSubtotal = 0, _orderQty = 0, _orderAutoAmount = null;
+function applyOrderPromo(){
+  const amtEl = document.getElementById('orderAmount');
+  const discEl = document.getElementById('orderDiscount');
+  if(!amtEl) return;
+  // 使用者手動改過金額就不要再動它（面板每次開啟會重設 _orderAutoAmount）
+  if(_orderAutoAmount !== null && amtEl.value !== String(_orderAutoAmount)) return;
+  const fee = shipFeeOf(document.getElementById('orderShippingSel').value);
+  const r = computePromo(_orderQty, _orderSubtotal, promoRules, fee);
+  const payable = _orderSubtotal - r.discount;
+  amtEl.value = payable || '';
+  _orderAutoAmount = payable;
+  if(discEl) discEl.value = r.lines.map(l => l.name + (l.times > 1 ? '×' + l.times : '') + ' −' + fmtMoney(l.amount)).join('、');
+}
+
 // 選「面交」時才顯示面交時間/地點欄
 function updateMeetFields(){
   const show = document.getElementById('orderShippingSel').value === '面交';
   document.querySelectorAll('.meet-field').forEach(el => el.style.display = show ? '' : 'none');
 }
-document.getElementById('orderShippingSel').addEventListener('change', updateMeetFields);
+document.getElementById('orderShippingSel').addEventListener('change', ()=>{ updateMeetFields(); applyOrderPromo(); });
 
 document.getElementById('cancelOrderBtn').addEventListener('click', ()=>{
   orderPanel.classList.remove('show');
@@ -2578,7 +2665,7 @@ function renderOrders(){
     const tdAmount = document.createElement('td'); tdAmount.appendChild(makeNumberInput(order.amount, v=>{ order.amount=v; persist(); updateOrderStats(); })); tr.appendChild(tdAmount);
     const tdCost = document.createElement('td'); tdCost.appendChild(makeNumberInput(order.totalCost, v=>{ order.totalCost = (v===''?'':(parseFloat(v)||0)); persist(); })); tr.appendChild(tdCost);
     const tdShipping = document.createElement('td');
-    tdShipping.appendChild(makeSelect(SHIPPING_METHODS, order.shipping, v=>{ order.shipping=v; if(v!=='面交'){ order.meetAt=''; order.meetPlace=''; } persist(); renderOrders(); }, true));
+    tdShipping.appendChild(makeSelect(shippingMethodNames(), order.shipping, v=>{ order.shipping=v; if(v!=='面交'){ order.meetAt=''; order.meetPlace=''; } persist(); renderOrders(); }, true));
     if(order.shipping === '面交'){
       const mw = document.createElement('div'); mw.style.cssText = 'margin-top:5px;display:flex;flex-direction:column;gap:4px;';
       const mt = document.createElement('input'); mt.type = 'datetime-local'; mt.value = order.meetAt || ''; mt.title = '面交時間'; mt.style.cssText = 'font-size:12px;padding:4px 6px;';
@@ -3045,7 +3132,15 @@ async function buildPublishPayload(){
   if(hasNative){ const cel = document.getElementById('shopCollectionInput'); collectionRaw = cel ? cel.value.trim() : ''; }
   else { collectionRaw = await loadShopCollection(); }
   const collectionSheet = extractSheetId(collectionRaw) || DEFAULT_COLLECTION_SHEET;
-  return { generatedAt: new Date().toISOString(), items, images, promo, intro, trackUrl, socials, collectionSheet };
+  // 前台只需要「方式名稱」讓客人告訴你想怎麼寄；運費是後台算免運用的，不發布。
+  // 不公開的方式（郵寄）連名字都不送，避免直接開 catalog.json 就看得到。
+  const shipOptions = shipMethods.filter(m => m.pub)
+    .map(m => ({ name: m.name, hasFee: (Number(m.fee) || 0) > 0 }));
+  const rulesOut = promoRules.filter(r => r && r.on).map(r => ({
+    name: String(r.name || ''), mode: r.mode, metric: r.metric,
+    n: Number(r.n) || 0, kind: r.kind, value: Number(r.value) || 0
+  }));
+  return { generatedAt: new Date().toISOString(), items, images, shipOptions, promoRules: rulesOut, promo, intro, trackUrl, socials, collectionSheet };
 }
 async function sha1HexBrowser(bytes){
   const buf = await crypto.subtle.digest('SHA-1', bytes);
@@ -3079,9 +3174,17 @@ async function publishViaGitHub(payload, hint){
   const socials = (Array.isArray(payload.socials) && payload.socials.length)
     ? payload.socials
     : (Array.isArray(existing.socials) ? existing.socials : []);
+  // 手機端沒有這兩份設定的編輯 UI（值為空），若不沿用線上既有值，
+  // 從手機發布一次就會把運送選項與優惠規則從線上 catalog 清空。
+  const shipOptions = (Array.isArray(payload.shipOptions) && payload.shipOptions.length)
+    ? payload.shipOptions
+    : (Array.isArray(existing.shipOptions) ? existing.shipOptions : []);
+  const promoRulesOut = (Array.isArray(payload.promoRules) && payload.promoRules.length)
+    ? payload.promoRules
+    : (Array.isArray(existing.promoRules) ? existing.promoRules : []);
   const catalogJson = JSON.stringify({
     generatedAt: payload.generatedAt, items: payload.items,
-    promo, intro, trackUrl, socials
+    promo, intro, trackUrl, socials, shipOptions, promoRules: promoRulesOut
   }, null, 2);
   return await CDGitHubPublish.publishShopToGitHub({
     token, owner: GH_OWNER, repo: GH_REPO, branch: GH_BRANCH,
@@ -3193,6 +3296,104 @@ function normalizeSocials(raw){
     label: typeof x.label === 'string' ? x.label : '',
     url: typeof x.url === 'string' ? x.url : ''
   }));
+}
+// ---- 運費表 ----
+async function loadShipMethods(){
+  const raw = await loadKey('shopShipMethods');
+  if(!Array.isArray(raw) || !raw.length) return SHIP_DEFAULTS.map(m => Object.assign({}, m));
+  // 以預設清單為準合併：名稱是程式碼的一部分（'面交' 被字串比對），不吃外部名稱
+  return SHIP_DEFAULTS.map(function(d){
+    const hit = raw.find(function(x){ return x && x.name === d.name; }) || {};
+    return { name: d.name, fee: (hit.fee === undefined ? d.fee : hit.fee), pub: (hit.pub === undefined ? d.pub : !!hit.pub) };
+  });
+}
+async function saveShipMethods(){ await saveKey('shopShipMethods', shipMethods); }
+function renderShipEditor(){
+  const box = document.getElementById('shipList'); if(!box) return;
+  box.innerHTML = '';
+  shipMethods.forEach(function(m, idx){
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:5px;';
+    const nm = document.createElement('span');
+    nm.textContent = m.name; nm.style.cssText = 'min-width:96px;font-size:13px;';
+    const fee = document.createElement('input');
+    fee.type = 'number'; fee.min = '0'; fee.className = 'cell-amount';
+    fee.value = (m.fee === '' || m.fee == null) ? '' : m.fee;
+    fee.placeholder = '運費';
+    fee.title = m.name === '郵寄' ? '郵寄運費不固定，可留空、成立訂單時自己填' : '免運時要折抵的金額';
+    fee.addEventListener('change', async ()=>{ shipMethods[idx].fee = fee.value; await saveShipMethods(); });
+    const pubLab = document.createElement('label');
+    pubLab.style.cssText = 'display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);cursor:pointer;';
+    const pub = document.createElement('input'); pub.type = 'checkbox'; pub.checked = !!m.pub;
+    pub.addEventListener('change', async ()=>{ shipMethods[idx].pub = pub.checked; await saveShipMethods(); });
+    pubLab.appendChild(pub); pubLab.appendChild(document.createTextNode('前台可選'));
+    row.appendChild(nm); row.appendChild(fee); row.appendChild(pubLab);
+    box.appendChild(row);
+  });
+}
+
+// ---- 優惠規則 ----
+async function loadPromoRules(){
+  const raw = await loadKey('shopPromoRules');
+  if(!Array.isArray(raw)) return PROMO_DEFAULTS.map(r => Object.assign({}, r));
+  return raw.filter(r => r && typeof r === 'object').map(r => ({
+    on: !!r.on, name: String(r.name || ''),
+    mode: (r.mode === 'every') ? 'every' : 'atLeast',
+    metric: (r.metric === 'qty') ? 'qty' : 'money',
+    n: r.n, kind: (r.kind === 'percent' || r.kind === 'freeship') ? r.kind : 'amount', value: r.value
+  }));
+}
+async function savePromoRules(){ await saveKey('shopPromoRules', promoRules); renderPromoPreview(); }
+function renderPromoEditor(){
+  const box = document.getElementById('promoList'); if(!box) return;
+  box.innerHTML = '';
+  promoRules.forEach(function(r, idx){
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:5px;margin-bottom:5px;flex-wrap:wrap;';
+    const on = document.createElement('input'); on.type = 'checkbox'; on.checked = !!r.on;
+    on.title = '勾選才生效';
+    on.addEventListener('change', async ()=>{ promoRules[idx].on = on.checked; await savePromoRules(); });
+    const nm = document.createElement('input'); nm.type = 'text'; nm.className = 'cell-input';
+    nm.value = r.name || ''; nm.placeholder = '活動名稱'; nm.style.maxWidth = '110px';
+    nm.addEventListener('change', async ()=>{ promoRules[idx].name = nm.value.trim(); await savePromoRules(); });
+    const mkSel = (opts, val, on2)=>{
+      const sel = document.createElement('select'); sel.className = 'status-select';
+      opts.forEach(([v,t])=>{ const o=document.createElement('option'); o.value=v; o.textContent=t; if(v===val) o.selected=true; sel.appendChild(o); });
+      sel.addEventListener('change', on2); return sel;
+    };
+    const mode = mkSel([['every','每'],['atLeast','滿']], r.mode, async ()=>{ promoRules[idx].mode = mode.value; await savePromoRules(); renderPromoEditor(); });
+    const n = document.createElement('input'); n.type='number'; n.min='1'; n.className='cell-amount'; n.value = (r.n==null?'':r.n);
+    n.addEventListener('change', async ()=>{ promoRules[idx].n = n.value; await savePromoRules(); });
+    const metric = mkSel([['qty','件'],['money','元']], r.metric, async ()=>{ promoRules[idx].metric = metric.value; await savePromoRules(); });
+    const arrow = document.createElement('span'); arrow.textContent = '→'; arrow.style.color = 'var(--text-muted)';
+    const kind = mkSel([['amount','折 ◯ 元'],['percent','打 ◯ 折'],['freeship','免運']], r.kind, async ()=>{
+      promoRules[idx].kind = kind.value;
+      // 「每」只對「折固定金額」有意義：打折/免運本來就只能套一次，
+      // 留著 mode='every' 會讓提示文案寫出「再買 500 元可再打 9 折」這種永遠不會兌現的承諾
+      if(kind.value !== 'amount') promoRules[idx].mode = 'atLeast';
+      await savePromoRules(); renderPromoEditor();
+    });
+    const val = document.createElement('input'); val.type='number'; val.min='0'; val.className='cell-amount';
+    val.value = (r.value==null?'':r.value);
+    val.style.display = (r.kind === 'freeship') ? 'none' : '';
+    val.addEventListener('change', async ()=>{ promoRules[idx].value = val.value; await savePromoRules(); });
+    mode.disabled = (r.kind !== 'amount');
+    const del = document.createElement('button'); del.className='small-icon'; del.type='button';
+    del.textContent='✕'; del.title='刪除這條規則';
+    del.addEventListener('click', async ()=>{ promoRules.splice(idx,1); await savePromoRules(); renderPromoEditor(); });
+    [on,nm,mode,n,metric,arrow,kind,val,del].forEach(el=>row.appendChild(el));
+    box.appendChild(row);
+  });
+}
+// 一行即時試算，讓你改數字當下就看得到結果（不用自己心算驗證）
+function renderPromoPreview(){
+  const el = document.getElementById('promoPreview'); if(!el) return;
+  const demoQty = 7, demoSub = 2100, demoFee = shipFeeOf('7-11店到店');
+  const r = computePromo(demoQty, demoSub, promoRules, demoFee);
+  const parts = r.lines.map(l => l.name + ' −' + fmtMoney(l.amount));
+  el.textContent = '試算：買 ' + demoQty + ' 件、小計 ' + fmtMoney(demoSub) + '（7-11店到店）'
+    + (parts.length ? ' → ' + parts.join('、') : ' → 無適用優惠')
+    + ' → 應付 ' + fmtMoney(demoSub - r.discount);
 }
 async function loadShopSocials(){ return normalizeSocials(await loadKey('shopSocials')); }
 async function saveShopSocials(items){ await saveKey('shopSocials', Array.isArray(items) ? items : []); }
@@ -3485,6 +3686,28 @@ async function showNativeStorageInfo(){
       if(addBtn && !addBtn._wired){
         addBtn._wired = true;
         addBtn.addEventListener('click', async ()=>{ shopSocialsItems.push({ icon:'', label:'', url:'' }); await saveShopSocials(shopSocialsItems); renderSocialsEditor(); });
+      }
+    }
+    // 運費表：載入既有值、渲染編輯器
+    const shipRow = document.getElementById('shipRow');
+    if(shipRow){
+      shipRow.style.display = 'block';
+      shipMethods = await loadShipMethods();
+      renderShipEditor();
+    }
+    // 優惠規則：載入既有規則、渲染編輯器與試算
+    const promoRulesRow = document.getElementById('promoRulesRow');
+    if(promoRulesRow){
+      promoRulesRow.style.display = 'block';
+      promoRules = await loadPromoRules();
+      renderPromoEditor(); renderPromoPreview();
+      const addP = document.getElementById('addPromoBtn');
+      if(addP && !addP._wired){
+        addP._wired = true;
+        addP.addEventListener('click', async ()=>{
+          promoRules.push({ on:false, name:'新優惠', mode:'atLeast', metric:'money', n:1000, kind:'amount', value:100 });
+          await savePromoRules(); renderPromoEditor();
+        });
       }
     }
     // 個人收藏頁連動的試算表：載入既有值、變更即存
