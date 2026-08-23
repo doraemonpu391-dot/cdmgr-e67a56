@@ -177,6 +177,16 @@
   .modal-box{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:24px;max-width:420px;width:100%;box-shadow:0 12px 40px #0008;}
   .modal-box .modal-msg{font-size:14.5px;line-height:1.6;color:var(--text);margin-bottom:20px;white-space:pre-wrap;}
   .modal-box .modal-actions{display:flex;gap:10px;justify-content:flex-end;}
+  /* 設定分頁：原本一長串設定欄位改成分頁，避免頁面過長 */
+  .set-tabbar{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:12px;}
+  .set-tab{
+    background:transparent;border:none;border-bottom:2px solid transparent;
+    color:var(--text-muted);padding:7px 12px;cursor:pointer;font-family:inherit;
+    font-size:12.5px;white-space:nowrap;border-radius:6px 6px 0 0;
+  }
+  .set-tab:hover{color:var(--text);background:#ffffff08;}
+  .set-tab.active{color:var(--gold);border-bottom-color:var(--gold);font-weight:600;}
+  .set-pane[hidden]{display:none;}
 </style>
 </head>
 <body>
@@ -219,6 +229,15 @@
     </div>
     <div id="nativeWarnRow" style="display:none;margin-top:8px;color:var(--danger);font-size:12.5px;line-height:1.6;"></div>
     <div id="syncRow" style="display:none;margin-top:8px;font-size:12.5px;line-height:1.7;"></div>
+    <div id="setTabs" style="display:none;margin-top:14px;">
+      <div class="set-tabbar">
+        <button class="set-tab active" type="button" data-pane="paneIntro">介紹與公告</button>
+        <button class="set-tab" type="button" data-pane="paneSocial">社群連結</button>
+        <button class="set-tab" type="button" data-pane="paneShip">運送與運費</button>
+        <button class="set-tab" type="button" data-pane="panePromo">優惠規則</button>
+        <button class="set-tab" type="button" data-pane="paneTrack">收藏頁與追蹤</button>
+      </div>
+      <div class="set-pane" id="paneIntro">
     <div id="introRow" style="display:none;margin-top:12px;">
       <label class="field" style="display:block;font-size:12px;color:var(--teal);margin-bottom:4px;">商品頁最上方介紹（歡迎詞／使用說明／你的 FB・Threads・IG，顯示為 teal 色無框文字；只有你能編輯，改完按「發布商品頁」才更新）</label>
       <textarea id="shopIntroInput" placeholder="歡迎詞、購買說明、你的社群帳號…" style="width:100%;min-height:120px;background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;line-height:1.7;resize:vertical;"></textarea>
@@ -227,28 +246,32 @@
       <label class="field" style="display:block;font-size:12px;color:var(--gold);margin-bottom:4px;">商品頁優惠公告（顯示在公開商品頁最上方，只有你能編輯；改完按「發布商品頁」才會更新）</label>
       <textarea id="shopPromoInput" placeholder="例如：本週優惠 買三片折 NT$50！面交可再議～" style="width:100%;min-height:52px;background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;resize:vertical;"></textarea>
     </div>
+      </div>
+      <div class="set-pane" id="paneSocial" hidden>
     <div id="socialsRow" style="display:none;margin-top:12px;">
       <label class="field" style="display:block;font-size:12px;color:var(--teal);margin-bottom:4px;">社群連結（自訂）：每筆＝上傳一個 icon ＋ 顯示文字 ＋ 連結網址。商品頁最上方會顯示成可點的「icon＋文字」。可加多筆；改完按「發布商品頁」才更新。</label>
       <div id="socialsList"></div>
       <button class="ghost" id="addSocialBtn" type="button" style="margin-top:4px;">＋ 新增社群連結</button>
     </div>
+      </div>
+      <div class="set-pane" id="paneShip" hidden>
     <div id="shipRow" style="display:none;margin-top:12px;">
       <label class="field" style="display:block;font-size:12px;color:var(--teal);margin-bottom:4px;">運送方式與運費：運費只用來在成立訂單時算「免運」要折多少，<b>不會發布到公開商品頁</b>。取消勾選「前台可選」的方式，客人在商品頁選不到（但你後台仍可用）。名稱不可改。</label>
       <div id="shipList"></div>
     </div>
+      </div>
+      <div class="set-pane" id="panePromo" hidden>
     <div id="promoRulesRow" style="display:none;margin-top:12px;">
       <label class="field" style="display:block;font-size:12px;color:var(--teal);margin-bottom:4px;">優惠規則：讀法就是「<b>每／滿 ◯ 件／元 → 折 ◯ 元／打 ◯ 折／免運</b>」。可加多條，勾選才生效；活動結束把勾勾關掉即可，規則會留著下次再用。改完按「發布商品頁」才更新前台。</label>
       <div id="promoList"></div>
       <button class="ghost" id="addPromoBtn" type="button" style="margin-top:4px;">＋ 新增優惠規則</button>
       <div id="promoPreview" class="muted-small" style="margin-top:6px;"></div>
     </div>
+      </div>
+      <div class="set-pane" id="paneTrack" hidden>
     <div id="collectionRow" style="display:none;margin-top:12px;">
       <label class="field" style="display:block;font-size:12px;color:var(--teal);margin-bottom:4px;">個人收藏頁（/collection）連動的 Google 試算表：貼<b>網址或 ID</b>。日後要遷移到別的試算表時改這裡，按「發布商品頁」後生效。留空則用目前預設。</label>
       <input type="text" id="shopCollectionInput" placeholder="https://docs.google.com/spreadsheets/d/…/edit　或直接貼試算表 ID" style="width:100%;background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;">
-    </div>
-    <div id="ghRow" style="display:none;margin-top:12px;">
-      <label class="field" style="display:block;font-size:12px;color:var(--gold);margin-bottom:4px;">手機發布用 GitHub Token（fine-grained，只給 <b>cd-shop-manager</b> 這個 repo 的 Contents 讀寫權限）。設定後手機也能按「發布商品頁」。</label>
-      <input type="password" id="ghTokenInput" placeholder="github_pat_..." autocomplete="off" style="width:100%;background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;">
     </div>
     <div id="trackRow" style="display:none;margin-top:12px;">
       <label class="field" style="display:block;font-size:12px;color:var(--teal);margin-bottom:4px;">訪客追蹤設定（Google Apps Script 網址與密鑰；設定後發布商品頁即開始記錄訪客，可到「數據分析」分頁看統計）</label>
@@ -256,6 +279,12 @@
         <input type="text" id="trackUrlInput" placeholder="Apps Script 網頁應用程式 URL（.../exec）" style="flex:1;min-width:260px;background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;">
         <input type="text" id="trackKeyInput" placeholder="讀取密鑰（STATS_KEY）" style="width:200px;background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;">
       </div>
+    </div>
+      </div>
+    </div>
+    <div id="ghRow" style="display:none;margin-top:12px;">
+      <label class="field" style="display:block;font-size:12px;color:var(--gold);margin-bottom:4px;">手機發布用 GitHub Token（fine-grained，只給 <b>cd-shop-manager</b> 這個 repo 的 Contents 讀寫權限）。設定後手機也能按「發布商品頁」。</label>
+      <input type="password" id="ghTokenInput" placeholder="github_pat_..." autocomplete="off" style="width:100%;background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;">
     </div>
     <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
       <button class="secondary" id="backupBtn">備份資料</button>
@@ -491,6 +520,12 @@
             <label><input type="radio" name="editSide" value="yes"> 有側標</label>
             <label><input type="radio" name="editSide" value="no"> 無側標</label>
           </div>
+          <div class="bidtype-checks" style="grid-column:1/-1;flex-wrap:wrap;">
+            <span style="font-size:12px;color:var(--text-muted);align-self:center;">優惠：</span>
+            <label><input type="radio" name="editPromo" value="keep" checked> 不修改</label>
+            <label><input type="radio" name="editPromo" value="no"> 不參與優惠（殘次／已特價）</label>
+            <label><input type="radio" name="editPromo" value="yes"> 參與優惠</label>
+          </div>
           <div><label class="field">狀態</label><select id="edtStatus"><option value="keep">不修改</option><option value="在售">在售</option><option value="保留中">保留中</option><option value="已售出">已售出</option><option value="已下架">已下架</option></select></div>
         </div>
         <div class="dl-row">
@@ -711,14 +746,17 @@ let promoRules = PROMO_DEFAULTS.map(r => Object.assign({}, r));
 // 折扣計算。**與 shop-template.html 的 computePromo 必須完全同規則**，改一邊要改兩邊。
 // 全部數值強制轉型：設定欄位存的是 input.value（字串），沒轉型的話 discount += fee
 // 會變成字串串接（'50'+'60'='5060'），折扣直接超過小計 → 整筆訂單免費。
-function computePromo(qty, subtotal, rules, shipFee){
+// qty/subtotal = **符合優惠資格**的件數與金額（已排除標記「不參與優惠」與面議的商品）；
+// fullSub = 整筆訂單金額。免運門檻看整筆（客人實際花的錢），其他規則只看符合資格的部分。
+function computePromo(qty, subtotal, rules, shipFee, fullSub){
   const q = Number(qty) || 0, sub = Number(subtotal) || 0, fee = Number(shipFee) || 0;
+  const total = (fullSub == null) ? sub : (Number(fullSub) || 0);
   const out = { discount: 0, freeShip: false, lines: [] };
   (Array.isArray(rules) ? rules : []).forEach(function(r){
     if(!r || !r.on) return;
     const n = Number(r.n);
     if(!isFinite(n) || n <= 0) return;                 // n=0 會讓 floor(x/0)=Infinity
-    const base = (r.metric === 'qty') ? q : sub;
+    const base = (r.metric === 'qty') ? q : (r.kind === 'freeship' ? total : sub);
     // 打折與免運只能套用一次；「每」只對「折固定金額」有意義
     const times = (r.mode === 'every' && r.kind === 'amount') ? Math.floor(base / n) : (base >= n ? 1 : 0);
     if(times <= 0) return;
@@ -738,7 +776,7 @@ function computePromo(qty, subtotal, rules, shipFee){
     out.lines.push({ name: String(r.name || '優惠'), amount: amt, times: times, kind: r.kind });
   });
   // 夾住上下界：沒有 max(0) 的話設定錯誤會算出負折扣→反而向客人多收錢
-  out.discount = Math.max(0, Math.min(out.discount, sub));
+  out.discount = Math.max(0, Math.min(out.discount, total));   // 上限是整筆金額，不可折成負數
   return out;
 }
 const SHIP_STATUSES = ['待出貨', '已出貨', '問題件'];
@@ -1948,6 +1986,13 @@ function renderListings(){
     nameWrap.appendChild(thumb); nameWrap.appendChild(nameText);
     tdName.appendChild(nameWrap);
     // 保留中商品：私密「保留給」備註（僅後台可見，絕不進公開商品頁）
+    if(item.noPromo){
+      const np = document.createElement('div');
+      np.textContent = '不參與優惠';
+      np.title = '這件商品不計入滿件／滿額優惠，也不會被折扣（用「編輯選取項目」修改）';
+      np.style.cssText = 'margin-top:4px;font-size:11px;color:var(--text-muted);border:1px solid var(--line);border-radius:999px;padding:1px 7px;display:inline-block;';
+      tdName.appendChild(np);
+    }
     if(item.status === '保留中'){
       const resWrap = document.createElement('div');
       resWrap.style.cssText = 'margin-top:5px;display:flex;align-items:center;gap:5px;';
@@ -2218,6 +2263,7 @@ function resetEditPanel(){
   document.querySelector('input[name="editBidMode"][value="keep"]').checked = true;
   document.getElementById('editAuctionWrap').style.display = 'none';
   document.querySelector('input[name="editSide"][value="keep"]').checked = true;
+  document.querySelector('input[name="editPromo"][value="keep"]').checked = true;
   document.getElementById('edtStatus').value = 'keep';
 }
 document.getElementById('batchEditBtn').addEventListener('click', async ()=>{
@@ -2267,6 +2313,7 @@ document.getElementById('confirmEditBtn').addEventListener('click', async ()=>{
   const bidMode = (document.querySelector('input[name="editBidMode"]:checked')||{}).value || 'keep';
   const newAuctionEnd = document.getElementById('edtAuctionEnd').value;
   const side = (document.querySelector('input[name="editSide"]:checked')||{}).value || 'keep';
+  const promoMode = (document.querySelector('input[name="editPromo"]:checked')||{}).value || 'keep';
   const status = document.getElementById('edtStatus').value;
 
   if(platEnable && plats.length === 0 && !(await uiConfirm('「修改上架平台」已勾選但未選任何平台，將清空這些商品的上架平台。確定要繼續嗎？'))) return;
@@ -2286,6 +2333,8 @@ document.getElementById('confirmEditBtn').addEventListener('click', async ()=>{
     else if(bidMode === '競標'){ item.biddingType = '競標'; if(newAuctionEnd) item.auctionEnd = newAuctionEnd; }
     if(side === 'yes') item.sideLabel = true;
     else if(side === 'no') item.sideLabel = false;
+    if(promoMode === 'no') item.noPromo = true;
+    else if(promoMode === 'yes') item.noPromo = false;
     if(status !== 'keep') item.status = status;
   });
   await saveKey('listings', listings);
@@ -2363,7 +2412,12 @@ document.getElementById('createOrderBtn').addEventListener('click', async ()=>{
   document.getElementById('orderDate').value = todayStr();
   document.getElementById('orderBuyer').value = '';
   document.getElementById('orderNoInput').value = '';
-  _orderSubtotal = total; _orderQty = selected.length; _orderAutoAmount = null;   // 面板重開＝重新自動填
+  // 標記「不參與優惠」與面議（無標價）的商品不計入門檻、也不被折扣
+  const promoOk = selected.filter(l => !l.noPromo && (parseFloat(l.price) || 0) > 0);
+  _orderSubtotal = total;
+  _promoQty = promoOk.length;
+  _promoSub = promoOk.reduce((sum, l) => sum + (parseFloat(l.price) || 0), 0);
+  _orderAutoAmount = null;   // 面板重開＝重新自動填
   applyOrderPromo();                       // 依目前運送方式算出折扣並填入金額
   document.getElementById('orderCost').value = costTotal || '';
   document.getElementById('orderNotesInput').value = '';
@@ -2478,7 +2532,7 @@ document.getElementById('addToOrderBtn').addEventListener('click', async ()=>{
 
 // 成立訂單面板的折扣自動套用。免運要知道運送方式才算得出來，所以放在這裡而不是前台。
 // 運費本身不進 order.amount——毛利是 amount − 成本，把代收轉付的運費算進去會讓每筆毛利虛增。
-let _orderSubtotal = 0, _orderQty = 0, _orderAutoAmount = null;
+let _orderSubtotal = 0, _promoQty = 0, _promoSub = 0, _orderAutoAmount = null;
 function applyOrderPromo(){
   const amtEl = document.getElementById('orderAmount');
   const discEl = document.getElementById('orderDiscount');
@@ -2486,7 +2540,7 @@ function applyOrderPromo(){
   // 使用者手動改過金額就不要再動它（面板每次開啟會重設 _orderAutoAmount）
   if(_orderAutoAmount !== null && amtEl.value !== String(_orderAutoAmount)) return;
   const fee = shipFeeOf(document.getElementById('orderShippingSel').value);
-  const r = computePromo(_orderQty, _orderSubtotal, promoRules, fee);
+  const r = computePromo(_promoQty, _promoSub, promoRules, fee, _orderSubtotal);
   const payable = _orderSubtotal - r.discount;
   amtEl.value = payable || '';
   _orderAutoAmount = payable;
@@ -3104,7 +3158,7 @@ async function saveGhToken(v){ await saveKey('ghToken', [v || '']); }
 async function buildPublishPayload(){
   const forSale = listings.filter(l => (l.status === '在售' || l.status === '保留中') && l.biddingType !== '競標' && !l.archived);
   const items = forSale.map(l => ({
-    id: l.id, artist: l.artist, album: l.album, price: l.price, origPrice: l.origPrice || '',
+    id: l.id, artist: l.artist, album: l.album, price: l.price, origPrice: l.origPrice || '', noPromo: !!l.noPromo,
     genre: l.genre, notes: l.notes, sideLabel: l.sideLabel, hasImage: !!l.hasImage,
     regions: Array.isArray(l.regions) ? l.regions : [],
     genres: Array.isArray(l.genres) ? l.genres : [],
@@ -3687,6 +3741,21 @@ async function showNativeStorageInfo(){
         addBtn._wired = true;
         addBtn.addEventListener('click', async ()=>{ shopSocialsItems.push({ icon:'', label:'', url:'' }); await saveShopSocials(shopSocialsItems); renderSocialsEditor(); });
       }
+    }
+    // 設定分頁：把一長串設定收成 5 個分頁
+    const setTabs = document.getElementById('setTabs');
+    if(setTabs && !setTabs._wired){
+      setTabs._wired = true;
+      setTabs.style.display = 'block';
+      const tabs = Array.from(setTabs.querySelectorAll('.set-tab'));
+      tabs.forEach(function(btn){
+        btn.addEventListener('click', function(){
+          tabs.forEach(b => b.classList.toggle('active', b === btn));
+          setTabs.querySelectorAll('.set-pane').forEach(function(pane){
+            pane.hidden = (pane.id !== btn.dataset.pane);
+          });
+        });
+      });
     }
     // 運費表：載入既有值、渲染編輯器
     const shipRow = document.getElementById('shipRow');
