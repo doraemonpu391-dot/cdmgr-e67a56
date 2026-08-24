@@ -1022,7 +1022,9 @@ function canDecodeImage(dataUrl){
 }
 // Downscale oversized photos to keep storage / sync-file / backups lean.
 // Listing photos never need 3MB originals: the composite cell is 620px.
-const IMG_MAX_DIM = 1600;
+// 商品卡實際只顯示 220–300px 寬，900px 已是 3 倍解析度綽綽有餘。
+// 原本 1600px 讓每張圖平均 539KB，是 repo 撐大與前台載入慢的主因。
+const IMG_MAX_DIM = 900;
 function downscaleImage(dataUrl, maxDim){
   return new Promise((resolve)=>{
     const img = new Image();
@@ -1033,7 +1035,7 @@ function downscaleImage(dataUrl, maxDim){
       const c = document.createElement('canvas');
       c.width = Math.round(w * scale); c.height = Math.round(h * scale);
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      try{ resolve(c.toDataURL('image/jpeg', 0.85)); }
+      try{ resolve(c.toDataURL('image/jpeg', 0.82)); }
       catch(e){ resolve(dataUrl); }
     };
     img.onerror = ()=> resolve(dataUrl);
@@ -2978,16 +2980,24 @@ document.getElementById('exportCsvBtn').addEventListener('click', ()=>{
    and any future native build — because it's platform-neutral.)
 ================================================================ */
 // Pack all current data + images into one portable backup object.
-async function buildBackupObject(){
+// withImages=false → 純文字（同步用）。圖片 base64 佔了 99.9% 的體積：
+// 174 張圖 = 90MB 原始 → base64 後 120MB，而文字只有 148KB。
+// 手機端要在瀏覽器記憶體組出 120MB 的 JSON 常常直接失敗（且不會報錯），
+// 這就是手機匯出同步檔會靜默失效的原因。
+async function buildBackupObject(opts){
+  const withImages = !(opts && opts.withImages === false);
   const images = {};
-  for(const l of listings){
-    const img = await imgGet(l.id);
-    if(img) images[l.id] = img;
+  if(withImages){
+    for(const l of listings){
+      const img = await imgGet(l.id);
+      if(img) images[l.id] = img;
+    }
   }
   return {
     _type: 'cd_shop_manager_backup',
     _version: 2,
     exportedAt: new Date().toISOString(),
+    textOnly: !withImages,
     listings, orders, archive, images
   };
 }
@@ -3022,9 +3032,13 @@ async function applyBackupObject(data, mode){
     archive = mergeById(archive, inArchive);
   } else {
     listings = inListings; orders = inOrders; archive = inArchive;
-    // overwrite: drop images not referenced anymore
-    const oldKeys = await imgAllKeys();
-    for(const k of oldKeys){ await imgDelete(k); }
+    // overwrite 會先清空本機圖庫再從備份還原。**純文字備份（同步檔）不含圖片**，
+    // 若照做就會把整個圖庫清光而且救不回來 → 沒有圖片的備份一律不清。
+    const hasImages = data.images && typeof data.images === 'object' && Object.keys(data.images).length > 0;
+    if(hasImages){
+      const oldKeys = await imgAllKeys();
+      for(const k of oldKeys){ await imgDelete(k); }
+    }
   }
   migrateTaxonomy(listings);   // 匯入/同步進來的舊資料也補上三軸分類欄
 
@@ -3063,13 +3077,46 @@ async function flushSyncWrite(){
   _syncDirty = false;
   clearTimeout(_syncTimer);
   try{
-    const bk = await buildBackupObject();
+    const bk = await buildBackupObject({ withImages: false });   // 同步檔只帶文字
     const okW = await window.cdshopNative.syncWrite(JSON.stringify(bk));
     if(okW){
       const el = document.getElementById('syncLastWrite');
       if(el) el.textContent = new Date().toLocaleTimeString('zh-TW', {hour12:false});
     }
   }catch(e){ console.error('同步寫入失敗：', e); }
+}
+
+// 從 iCloud 同步檔讀取並合併。桌面版原本只在啟動時讀一次，
+// 所以手機在 App 開著時存回來的檔案永遠不會被看到，而且下一次本機存檔就把它蓋掉。
+// 同步檔改成純文字後重讀幾乎零成本，因此提供手動「立刻合併」。
+async function pullFromSync(interactive){
+  if(!_syncAvailable || !hasNative || !window.cdshopNative.syncRead){
+    if(interactive) await uiAlert('目前沒有可用的 iCloud 同步檔。');
+    return false;
+  }
+  let raw = null;
+  try{ raw = await window.cdshopNative.syncRead(); }
+  catch(e){
+    console.error('讀取同步檔失敗：', e);
+    if(interactive) await uiAlert('讀取同步檔失敗：' + (e && e.message || e));
+    return false;
+  }
+  if(!raw){ if(interactive) await uiAlert('同步檔是空的或還沒從 iCloud 下載完成。'); return false; }
+  let data;
+  try{ data = JSON.parse(raw); }
+  catch(e){ if(interactive) await uiAlert('同步檔內容無法解析，未做任何變更。'); return false; }
+  if(!isValidBackup(data)){ if(interactive) await uiAlert('同步檔格式不正確，未做任何變更。'); return false; }
+  const before = { l: listings.length, o: orders.length, a: archive.length };
+  await applyBackupObject(data, 'merge');     // 一律合併，絕不覆蓋
+  renderListings(); renderOrders(); renderArchive(); updateOrderStats(); renderTodoBanner();
+  if(interactive){
+    const when = data.exportedAt ? new Date(data.exportedAt).toLocaleString('zh-TW', {hour12:false}) : '(未知時間)';
+    await uiAlert('已從 iCloud 合併完成。\n\n同步檔匯出時間：' + when
+      + '\n商品 ' + before.l + ' → ' + listings.length
+      + '　訂單 ' + before.o + ' → ' + orders.length
+      + '　封存 ' + before.a + ' → ' + archive.length);
+  }
+  return true;
 }
 
 async function setupSync(){
@@ -3083,15 +3130,18 @@ async function setupSync(){
       row.style.display = 'block';
       row.innerHTML = '☁️ <b style="color:var(--teal);">iCloud 自動同步已啟用</b>：開啟時自動讀取合併、資料修改與關閉視窗時自動覆寫同一個檔案。<br>'
         + '<code style="color:var(--teal);word-break:break-all;font-family:\'JetBrains Mono\',monospace;">' + info.path + '</code>'
-        + '　<span class="muted-small">最後寫入 <span id="syncLastWrite">—</span></span>';
+        + '　<span class="muted-small">最後寫入 <span id="syncLastWrite">—</span></span>'
+        + '<div style="margin-top:6px;"><button class="ghost" id="syncPullBtn" type="button" title="手機存回 iCloud 後，不用重開 App，按這裡立刻合併">⬇︎ 立刻從 iCloud 合併</button></div>';
       // 開啟時讀取：合併（不覆蓋），避免舊檔清掉本機較新的資料
-      try{
-        const raw = await window.cdshopNative.syncRead();
-        if(raw){
-          const data = JSON.parse(raw);
-          if(isValidBackup(data)) await applyBackupObject(data, 'merge');
-        }
-      }catch(e){ console.error('讀取同步檔失敗：', e); }
+      await pullFromSync(false);
+      const pullBtn = document.getElementById('syncPullBtn');
+      if(pullBtn && !pullBtn._wired){
+        pullBtn._wired = true;
+        pullBtn.addEventListener('click', async ()=>{
+          pullBtn.disabled = true;
+          try{ await pullFromSync(true); } finally { pullBtn.disabled = false; }
+        });
+      }
       scheduleSyncWrite(); // 確保檔案存在且為最新（首次啟動也會建立）
       if(window.cdshopNative.onSyncFlush){
         window.cdshopNative.onSyncFlush(async ()=>{
