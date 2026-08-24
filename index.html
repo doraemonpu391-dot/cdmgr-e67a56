@@ -3167,7 +3167,10 @@ if(exportSyncBtnEl) exportSyncBtnEl.addEventListener('click', async ()=>{
   const hint = document.getElementById('backupHint');
   hint.textContent = '正在打包同步檔...';
   hint.classList.add('show');
-  const bk = await buildBackupObject();
+  // ⚠ 同步檔一律純文字。手機（iOS Safari）要在記憶體組出含圖片的 JSON（現在仍有 40MB 圖片、
+  // base64 後 50MB+）常常靜默失敗——使用者以為匯出成功，其實檔案根本沒生出來。
+  // 這裡漏掉 withImages:false 的話，桌面端的同步瘦身等於沒做（手機才是會失敗的那一端）。
+  const bk = await buildBackupObject({ withImages: false });
   const blob = new Blob([JSON.stringify(bk)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
