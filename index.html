@@ -3078,6 +3078,14 @@ async function flushSyncWrite(){
   clearTimeout(_syncTimer);
   try{
     const bk = await buildBackupObject({ withImages: false });   // 同步檔只帶文字
+    // 空資料集永遠不該覆寫同步檔。真實情境：誤開了另一份 App（例如 dist/ 裡的建置
+    // 產物）會用不同的資料夾但**同一個 iCloud 同步檔**，本機 0 筆卻把雲端的幾百筆
+    // 蓋掉。這台裝置沒有資料時，它對同步就沒有任何可貢獻的東西。
+    if((bk.listings||[]).length === 0 && (bk.orders||[]).length === 0 && (bk.archive||[]).length === 0){
+      console.warn('同步略過：本機沒有任何資料，不覆寫同步檔');
+      _syncDirty = true;        // 保持待寫狀態，等真的有資料再寫
+      return;
+    }
     const okW = await window.cdshopNative.syncWrite(JSON.stringify(bk));
     if(okW){
       const el = document.getElementById('syncLastWrite');
@@ -3171,6 +3179,12 @@ if(exportSyncBtnEl) exportSyncBtnEl.addEventListener('click', async ()=>{
   // base64 後 50MB+）常常靜默失敗——使用者以為匯出成功，其實檔案根本沒生出來。
   // 這裡漏掉 withImages:false 的話，桌面端的同步瘦身等於沒做（手機才是會失敗的那一端）。
   const bk = await buildBackupObject({ withImages: false });
+  // 同理：空的同步檔拿去「取代」雲端那份，等於把另一台的資料全刪
+  if((bk.listings||[]).length === 0 && (bk.orders||[]).length === 0 && (bk.archive||[]).length === 0){
+    hint.textContent = '這台裝置目前沒有任何資料，不產生同步檔（避免覆蓋掉另一台的資料）';
+    setTimeout(()=> hint.classList.remove('show'), 5000);
+    return;
+  }
   const blob = new Blob([JSON.stringify(bk)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
