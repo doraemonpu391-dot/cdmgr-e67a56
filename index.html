@@ -2672,10 +2672,8 @@ function openPickModal(order){
     const mid = document.createElement('div'); mid.style.cssText = 'flex:1;min-width:0;';
     const nm = document.createElement('div'); nm.textContent = r.name || '(未命名)'; nm.style.cssText = 'font-size:14px;line-height:1.45;';
     mid.appendChild(nm);
-    if(r.source){
-      const src = document.createElement('div'); src.className = 'muted-small';
-      src.textContent = '貨源：' + r.source; mid.appendChild(src);
-    }
+    // 刻意不顯示貨源：這個清單會被截圖傳給客人看總額，貨源是不該外流的商業資訊。
+    // （items 快照裡仍然有 source，報表的「依貨源毛利」照常運作，只是不畫在這裡。）
     line.appendChild(cb); line.appendChild(num); line.appendChild(mid);
     if(r.price != null && r.price !== ''){
       const pr = document.createElement('span');
