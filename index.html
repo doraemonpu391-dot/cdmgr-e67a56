@@ -2489,7 +2489,8 @@ document.getElementById('addToOrderBtn').addEventListener('click', async ()=>{
     id: l.id, name: formatName(l.artist, l.album),
     price: parseFloat(l.price) || 0,
     cost: parseFloat(l.cost) || 0,
-    source: l.source || ''
+    source: l.source || '',
+    noPromo: !!l.noPromo          // 帶進快照，加購時重算優惠才知道哪幾件不參與
   }));
   const addAmount = newItems.reduce((s, i) => s + i.price, 0);
   const addCost = newItems.reduce((s, i) => s + i.cost, 0);
@@ -2497,12 +2498,37 @@ document.getElementById('addToOrderBtn').addEventListener('click', async ()=>{
   const curAmount = parseFloat(order.amount) || 0;
   const curCost = parseFloat(order.totalCost);
 
+  // 加購後件數／金額變了，可能跨過「每 N 件折 M」或「滿額免運」的門檻。
+  // 用「加購前後的折扣差額」而不是整份重算——重算會把手動改過的金額蓋掉
+  // （實測 7 筆進行中訂單有 3 筆金額是手動調過的）。
+  const fee = shipFeeOf(order.shipping);
+  const promoFor = (items)=>{
+    const all = (items || []).map(it => ({
+      price: parseFloat(it.price) || 0,
+      // 舊快照沒存 noPromo，退回查目前的商品資料；查不到就當作參與優惠
+      noPromo: (it.noPromo !== undefined) ? !!it.noPromo
+               : !!((listings.find(l => l.id === it.id) || {}).noPromo)
+    }));
+    const okItems = all.filter(it => !it.noPromo && it.price > 0);
+    const fullSub = all.reduce((s, it) => s + it.price, 0);
+    const okSub = okItems.reduce((s, it) => s + it.price, 0);
+    return computePromo(okItems.length, okSub, promoRules, fee, fullSub);
+  };
+  const oldPromo = promoFor(order.items || []);
+  const newPromo = promoFor((order.items || []).concat(newItems));
+  const extraDiscount = Math.max(0, newPromo.discount - oldPromo.discount);
+
   const skipped = [];
   if(inThis.length) skipped.push(`${inThis.length} 件已在這筆`);
   if(inOther.length) skipped.push(`${inOther.length} 件已屬於其他訂單`);
   let msg = `加入 ${add.length} 件到「${order.buyer || '未填買家'}」：\n`
     + add.map(l => '・' + formatName(l.artist, l.album)).join('\n')
-    + `\n\n金額　${fmtMoney(curAmount)} → ${fmtMoney(curAmount + addAmount)}`;
+    + `\n\n金額　${fmtMoney(curAmount)} → ${fmtMoney(curAmount + addAmount - extraDiscount)}`;
+  if(extraDiscount > 0){
+    const newly = newPromo.lines.filter(l => !oldPromo.lines.some(o => o.name === l.name && o.amount === l.amount));
+    msg += `\n優惠　跨過門檻，再折 ${fmtMoney(extraDiscount)}`
+        + (newly.length ? `（${newly.map(l => l.name).join('、')}）` : '');
+  }
   msg += isFinite(curCost)
     ? `\n成本　${fmtMoney(curCost)} → ${fmtMoney(curCost + addCost)}`
     : `\n成本　這筆訂單原本沒有成本資料，維持空白（補上只有加購這幾件的成本，毛利報表會算出假數字）`;
@@ -2522,7 +2548,7 @@ document.getElementById('addToOrderBtn').addEventListener('click', async ()=>{
     const names = newItems.map(it => it.name).join('、');
     order.content = base ? base + '、' + names : names;
   }
-  order.amount = String(curAmount + addAmount);
+  order.amount = String(curAmount + addAmount - extraDiscount);
   if(isFinite(curCost)) order.totalCost = curCost + addCost;
   add.forEach(l => { l.status = '已售出'; });
 
@@ -2571,7 +2597,8 @@ document.getElementById('confirmOrderBtn').addEventListener('click', async ()=>{
     id: l.id, name: formatName(l.artist, l.album),
     price: parseFloat(l.price) || 0,
     cost: parseFloat(l.cost) || 0,
-    source: l.source || ''
+    source: l.source || '',
+    noPromo: !!l.noPromo          // 之後加購要重算優惠時，需要知道哪幾件不參與
   }));
   const costField = document.getElementById('orderCost').value;
   const totalCost = (costField !== '' && isFinite(parseFloat(costField)))
