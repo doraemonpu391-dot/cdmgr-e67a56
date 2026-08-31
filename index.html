@@ -723,7 +723,7 @@ const SHIP_DEFAULTS = [
   { name: '全家店到店', fee: 60, pub: true },
   { name: '賣貨便',     fee: 38, pub: true },
   { name: '面交',       fee: 0,  pub: true },
-  { name: '郵寄',       fee: '', pub: false }   // 運費看數量，每次自填；先不公開
+  { name: '郵寄',       fee: '', pub: true }    // 運費看數量、每次自填；前台可選（設定裡可再關掉）
 ];
 let shipMethods = SHIP_DEFAULTS.map(m => Object.assign({}, m));
 function shipFeeOf(name){
