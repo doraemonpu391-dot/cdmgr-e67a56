@@ -526,6 +526,12 @@
             <label><input type="radio" name="editPromo" value="no"> 不參與優惠（殘次／已特價）</label>
             <label><input type="radio" name="editPromo" value="yes"> 參與優惠</label>
           </div>
+          <div class="bidtype-checks" style="grid-column:1/-1;flex-wrap:wrap;">
+            <span style="font-size:12px;color:var(--text-muted);align-self:center;">公開：</span>
+            <label><input type="radio" name="editPublic" value="keep" checked> 不修改</label>
+            <label><input type="radio" name="editPublic" value="no"> 不公開（只留在後台）</label>
+            <label><input type="radio" name="editPublic" value="yes"> 公開上架</label>
+          </div>
           <div><label class="field">狀態</label><select id="edtStatus"><option value="keep">不修改</option><option value="在售">在售</option><option value="保留中">保留中</option><option value="已售出">已售出</option><option value="已下架">已下架</option></select></div>
         </div>
         <div class="dl-row">
@@ -1988,6 +1994,13 @@ function renderListings(){
     nameWrap.appendChild(thumb); nameWrap.appendChild(nameText);
     tdName.appendChild(nameWrap);
     // 保留中商品：私密「保留給」備註（僅後台可見，絕不進公開商品頁）
+    if(item.notPublic){
+      const pv = document.createElement('div');
+      pv.textContent = '🔒 不公開';
+      pv.title = '不會出現在公開商品頁（用「編輯選取項目」修改）';
+      pv.style.cssText = 'margin-top:4px;font-size:11px;color:var(--gold);border:1px solid var(--gold-deep);border-radius:999px;padding:1px 7px;display:inline-block;';
+      tdName.appendChild(pv);
+    }
     if(item.noPromo){
       const np = document.createElement('div');
       np.textContent = '不參與優惠';
@@ -2266,6 +2279,7 @@ function resetEditPanel(){
   document.getElementById('editAuctionWrap').style.display = 'none';
   document.querySelector('input[name="editSide"][value="keep"]').checked = true;
   document.querySelector('input[name="editPromo"][value="keep"]').checked = true;
+  document.querySelector('input[name="editPublic"][value="keep"]').checked = true;
   document.getElementById('edtStatus').value = 'keep';
 }
 document.getElementById('batchEditBtn').addEventListener('click', async ()=>{
@@ -2316,6 +2330,7 @@ document.getElementById('confirmEditBtn').addEventListener('click', async ()=>{
   const newAuctionEnd = document.getElementById('edtAuctionEnd').value;
   const side = (document.querySelector('input[name="editSide"]:checked')||{}).value || 'keep';
   const promoMode = (document.querySelector('input[name="editPromo"]:checked')||{}).value || 'keep';
+  const publicMode = (document.querySelector('input[name="editPublic"]:checked')||{}).value || 'keep';
   const status = document.getElementById('edtStatus').value;
 
   if(platEnable && plats.length === 0 && !(await uiConfirm('「修改上架平台」已勾選但未選任何平台，將清空這些商品的上架平台。確定要繼續嗎？'))) return;
@@ -2337,6 +2352,8 @@ document.getElementById('confirmEditBtn').addEventListener('click', async ()=>{
     else if(side === 'no') item.sideLabel = false;
     if(promoMode === 'no') item.noPromo = true;
     else if(promoMode === 'yes') item.noPromo = false;
+    if(publicMode === 'no') item.notPublic = true;
+    else if(publicMode === 'yes') item.notPublic = false;
     if(status !== 'keep') item.status = status;
   });
   await saveKey('listings', listings);
@@ -3248,7 +3265,10 @@ async function saveGhToken(v){ await saveKey('ghToken', [v || '']); }
 // 蒐集要發布的內容。注意：手機端 promo/intro 的輸入框是隱藏的（值為空），
 // 若直接讀輸入框會把商店的公告與介紹清空 → 非 native 一律從儲存讀取。
 async function buildPublishPayload(){
-  const forSale = listings.filter(l => (l.status === '在售' || l.status === '保留中') && l.biddingType !== '競標' && !l.archived);
+  // notPublic：留在後台但不上架到公開商品頁（例如私下保留給某人、還沒想好要不要賣）。
+  // 刻意做成跟「狀態」獨立的旗標——用「已下架」代替會被收進摺疊區、語意也不對。
+  const forSale = listings.filter(l => (l.status === '在售' || l.status === '保留中')
+    && l.biddingType !== '競標' && !l.archived && !l.notPublic);
   const items = forSale.map(l => ({
     id: l.id, artist: l.artist, album: l.album, price: l.price, origPrice: l.origPrice || '', noPromo: !!l.noPromo,
     genre: l.genre, notes: l.notes, sideLabel: l.sideLabel, hasImage: !!l.hasImage,
