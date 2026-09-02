@@ -420,7 +420,10 @@
           <label><input type="radio" name="lstBidType" value="直購"> 直購</label>
         </div>
         <div id="lstAuctionWrap" style="display:none;"><label class="field">截標時間（競標）</label><input type="datetime-local" id="lstAuctionEnd"></div>
-        <div><label class="field check-row" style="margin-top:6px;"><input type="checkbox" id="lstSideLabel"> 有側標</label></div>
+        <div style="display:flex;gap:18px;flex-wrap:wrap;">
+          <label class="field check-row" style="margin-top:6px;"><input type="checkbox" id="lstSideLabel"> 有側標</label>
+          <label class="field check-row" style="margin-top:6px;" title="只留在後台，不會出現在公開商品頁"><input type="checkbox" id="lstNotPublic"> 🔒 不公開</label>
+        </div>
       </div>
       <button class="primary" id="addListingBtn">＋ 新增上架</button>
     </div>
@@ -1763,6 +1766,7 @@ document.getElementById('addListingBtn').addEventListener('click', async ()=>{
   const platforms = Array.from(document.querySelectorAll('.platform-check:checked')).map(cb=>cb.value);
   const bidTypeEl = document.querySelector('input[name="lstBidType"]:checked');
   const sideLabel = document.getElementById('lstSideLabel').checked;
+  const notPublic = document.getElementById('lstNotPublic').checked;
   const biddingType = bidTypeEl ? bidTypeEl.value : '';
   const auctionEnd = biddingType === '競標' ? document.getElementById('lstAuctionEnd').value : '';
 
@@ -1773,7 +1777,7 @@ document.getElementById('addListingBtn').addEventListener('click', async ()=>{
   listings.push({
     id: newId, artist, album, price, cost, source, notes, platforms,
     regions, genres, subgenres,
-    biddingType, auctionEnd, sideLabel, hasImage: !!_lstPendingImg,
+    biddingType, auctionEnd, sideLabel, notPublic, hasImage: !!_lstPendingImg,
     status: '在售', dateAdded: todayStr()
   });
   _lstPendingImg = null; renderLstThumb();
@@ -1784,6 +1788,7 @@ document.getElementById('addListingBtn').addEventListener('click', async ()=>{
   document.querySelectorAll('.platform-check').forEach(cb=>cb.checked=false);
   document.querySelectorAll('input[name="lstBidType"]').forEach(r=>r.checked=false);
   document.getElementById('lstSideLabel').checked = false;
+  document.getElementById('lstNotPublic').checked = false;
   document.getElementById('lstAuctionWrap').style.display = 'none';
 
   renderListings();
