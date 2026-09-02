@@ -423,6 +423,7 @@
         <div style="display:flex;gap:18px;flex-wrap:wrap;">
           <label class="field check-row" style="margin-top:6px;"><input type="checkbox" id="lstSideLabel"> 有側標</label>
           <label class="field check-row" style="margin-top:6px;" title="只留在後台，不會出現在公開商品頁"><input type="checkbox" id="lstNotPublic"> 🔒 不公開</label>
+          <label class="field check-row" style="margin-top:6px;" title="殘次／已特價品：不計入滿件與滿額門檻，也不會被折扣"><input type="checkbox" id="lstNoPromo"> 不參與優惠</label>
         </div>
       </div>
       <button class="primary" id="addListingBtn">＋ 新增上架</button>
@@ -1767,6 +1768,7 @@ document.getElementById('addListingBtn').addEventListener('click', async ()=>{
   const bidTypeEl = document.querySelector('input[name="lstBidType"]:checked');
   const sideLabel = document.getElementById('lstSideLabel').checked;
   const notPublic = document.getElementById('lstNotPublic').checked;
+  const noPromo = document.getElementById('lstNoPromo').checked;
   const biddingType = bidTypeEl ? bidTypeEl.value : '';
   const auctionEnd = biddingType === '競標' ? document.getElementById('lstAuctionEnd').value : '';
 
@@ -1777,7 +1779,7 @@ document.getElementById('addListingBtn').addEventListener('click', async ()=>{
   listings.push({
     id: newId, artist, album, price, cost, source, notes, platforms,
     regions, genres, subgenres,
-    biddingType, auctionEnd, sideLabel, notPublic, hasImage: !!_lstPendingImg,
+    biddingType, auctionEnd, sideLabel, notPublic, noPromo, hasImage: !!_lstPendingImg,
     status: '在售', dateAdded: todayStr()
   });
   _lstPendingImg = null; renderLstThumb();
@@ -1789,6 +1791,7 @@ document.getElementById('addListingBtn').addEventListener('click', async ()=>{
   document.querySelectorAll('input[name="lstBidType"]').forEach(r=>r.checked=false);
   document.getElementById('lstSideLabel').checked = false;
   document.getElementById('lstNotPublic').checked = false;
+  document.getElementById('lstNoPromo').checked = false;
   document.getElementById('lstAuctionWrap').style.display = 'none';
 
   renderListings();
