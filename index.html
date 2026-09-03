@@ -228,6 +228,9 @@
       <code id="dataDirPath" style="color:var(--gold);word-break:break-all;font-family:'JetBrains Mono',monospace;"></code>
     </div>
     <div id="nativeWarnRow" style="display:none;margin-top:8px;color:var(--danger);font-size:12.5px;line-height:1.6;"></div>
+    <div id="swVerRow" style="display:none;margin-top:8px;font-size:12.5px;line-height:1.7;">
+      <span style="color:var(--text-muted);">離線快取版本：</span><code id="swVerText" style="color:var(--gold);font-family:'JetBrains Mono',monospace;"></code>
+    </div>
     <div id="syncRow" style="display:none;margin-top:8px;font-size:12.5px;line-height:1.7;"></div>
     <div id="setTabs" style="display:none;margin-top:14px;">
       <div class="set-tabbar">
@@ -3994,10 +3997,32 @@ async function init(){
 }
 init().then(()=>{ window.__cdReady = true; });
 
+// 表格欄位是 change（失焦）才寫入的。頁面被關掉、或被新版 service worker 換版重新導覽時，
+// 正在編輯又還沒失焦的那一格會整個消失，所以離開前強制失焦一次讓 change 觸發
+//（網頁版 saveKey 是同步寫 localStorage，來得及）。
+window.addEventListener('pagehide', ()=>{
+  const el = document.activeElement;
+  if(el && typeof el.blur === 'function' && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) el.blur();
+});
+
 // PWA: register the service worker only when served over http(s) (not in Electron file://)
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   window.addEventListener('load', ()=>{ navigator.serviceWorker.register('./sw.js').catch(()=>{}); });
+  navigator.serviceWorker.ready.then(showBuildVersion).catch(()=>{});
 }
+
+// 手機說「畫面怪怪的」時，至少講得出離線快取是哪一版（就是 sw.js 裡的 CACHE，
+// 不必另外維護版本號）。只是顯示，沒有按鈕：自癒交給 sw（network-first + 升級時重新導覽）。
+function showBuildVersion(){
+  if(!window.caches) return;
+  caches.keys().then((ks)=>{
+    const v = ks.filter(k=>k.indexOf('cdshop-')===0).join('、');
+    if(!v) return;
+    document.getElementById('swVerText').textContent = v;
+    document.getElementById('swVerRow').style.display = 'block';
+  }).catch(()=>{});
+}
+
 </script>
 </body>
 </html>
