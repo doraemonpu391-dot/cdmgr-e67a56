@@ -202,6 +202,7 @@
       <h3 style="margin:0;font-size:17px;color:var(--gold);font-weight:600;">揀貨明細</h3>
       <span class="muted-small" id="pickMeta"></span>
     </div>
+    <div id="pickInfo" style="margin-bottom:8px;font-size:12.5px;line-height:1.75;"></div>
     <div class="muted-small" style="margin-bottom:10px;">備貨時可勾選核對（勾選僅供對照，不會儲存）</div>
     <div id="pickBody" style="max-height:52vh;overflow:auto;"></div>
     <div id="pickTotal" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:13.5px;"></div>
@@ -559,6 +560,9 @@
           <div><label class="field">運送方式</label><select id="orderShippingSel"></select></div>
           <div class="meet-field" style="display:none;"><label class="field">面交時間</label><input type="datetime-local" id="orderMeetAt"></div>
           <div class="meet-field" style="display:none;"><label class="field">面交地點</label><input type="text" id="orderMeetPlace" placeholder="例如：板橋站 / 光華商場"></div>
+          <div class="store-field" style="display:none;"><label class="field">收件人姓名</label><input type="text" id="orderRecipient" placeholder="需與取貨證件相符"></div>
+          <div class="store-field" style="display:none;"><label class="field">收件人電話</label><input type="tel" id="orderRecipientPhone" placeholder="09xx-xxx-xxx"></div>
+          <div class="store-field" style="display:none;"><label class="field">取貨門市</label><input type="text" id="orderPickupStore" placeholder="例如：板橋文化門市"></div>
           <div><label class="field">付款狀態</label><select id="orderPaymentSel"></select></div>
           <div><label class="field">訂單編號（選填）</label><input type="text" id="orderNoInput"></div>
           <div><label class="field">訂單金額（可調整）</label><input type="number" id="orderAmount" min="0"></div>
@@ -747,6 +751,10 @@ function shipFeeOf(name){
 // 訂單面板/訂單表的下拉一律吃這個（含不公開的郵寄）
 function shippingMethodNames(){ return shipMethods.map(m => m.name); }
 const SHIPPING_METHODS = ['7-11店到店', '全家店到店', '賣貨便', '面交'];
+// 店到店要填超商寄件單，成立訂單時就要有收件人資料。名稱是程式碼的一部分
+//（見 loadShipMethods 的註解：不吃外部改的名稱），所以可以直接字串比對。
+const STORE_PICKUP_METHODS = ['7-11店到店', '全家店到店'];
+function isStorePickup(name){ return STORE_PICKUP_METHODS.indexOf(name) !== -1; }
 
 // ---- 優惠規則 ----
 // 一條規則＝「[每|滿] N [件|元] → [折 M 元 | 打 X 折 | 免運]」。
@@ -2465,7 +2473,10 @@ document.getElementById('createOrderBtn').addEventListener('click', async ()=>{
   document.getElementById('orderNotesInput').value = '';
   document.getElementById('orderMeetAt').value = '';
   document.getElementById('orderMeetPlace').value = '';
-  updateMeetFields();
+  document.getElementById('orderRecipient').value = '';
+  document.getElementById('orderRecipientPhone').value = '';
+  document.getElementById('orderPickupStore').value = '';
+  updateShippingFields();
 
   orderPanel.classList.add('show');
   orderPanel.scrollIntoView({behavior:'smooth', block:'center'});
@@ -2615,12 +2626,13 @@ function applyOrderPromo(){
   if(discEl) discEl.value = r.lines.map(l => l.name + (l.times > 1 ? '×' + l.times : '') + ' −' + fmtMoney(l.amount)).join('、');
 }
 
-// 選「面交」時才顯示面交時間/地點欄
-function updateMeetFields(){
-  const show = document.getElementById('orderShippingSel').value === '面交';
-  document.querySelectorAll('.meet-field').forEach(el => el.style.display = show ? '' : 'none');
+// 依運送方式顯示對應的額外欄位：面交→時間/地點；店到店→收件人/電話/門市
+function updateShippingFields(){
+  const v = document.getElementById('orderShippingSel').value;
+  document.querySelectorAll('.meet-field').forEach(el => el.style.display = (v === '面交') ? '' : 'none');
+  document.querySelectorAll('.store-field').forEach(el => el.style.display = isStorePickup(v) ? '' : 'none');
 }
-document.getElementById('orderShippingSel').addEventListener('change', ()=>{ updateMeetFields(); applyOrderPromo(); });
+document.getElementById('orderShippingSel').addEventListener('change', ()=>{ updateShippingFields(); applyOrderPromo(); });
 
 document.getElementById('cancelOrderBtn').addEventListener('click', ()=>{
   orderPanel.classList.remove('show');
@@ -2655,6 +2667,9 @@ document.getElementById('confirmOrderBtn').addEventListener('click', async ()=>{
     shipping: document.getElementById('orderShippingSel').value,
     meetAt: document.getElementById('orderShippingSel').value === '面交' ? (document.getElementById('orderMeetAt').value || '') : '',
     meetPlace: document.getElementById('orderShippingSel').value === '面交' ? document.getElementById('orderMeetPlace').value.trim() : '',
+    recipient: isStorePickup(document.getElementById('orderShippingSel').value) ? document.getElementById('orderRecipient').value.trim() : '',
+    recipientPhone: isStorePickup(document.getElementById('orderShippingSel').value) ? document.getElementById('orderRecipientPhone').value.trim() : '',
+    pickupStore: isStorePickup(document.getElementById('orderShippingSel').value) ? document.getElementById('orderPickupStore').value.trim() : '',
     orderNo: document.getElementById('orderNoInput').value.trim(),
     shipStatus: '待出貨',
     paymentStatus: document.getElementById('orderPaymentSel').value || '未付款',
@@ -2715,8 +2730,26 @@ pickOverlayEl.addEventListener('click', (e)=>{ if(e.target === pickOverlayEl) cl
 document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && pickOverlayEl.classList.contains('show')) closePickModal(); });
 
 function openPickModal(order){
-  const meta = [order.buyer, order.date, order.orderNo].filter(Boolean).join('　');
-  document.getElementById('pickMeta').textContent = meta;
+  document.getElementById('pickMeta').textContent = [order.buyer, order.date].filter(Boolean).join('　');
+
+  // 訂單編號與（店到店的）收件人資料。全部 createElement/textContent —— 這些是使用者輸入。
+  const info = document.getElementById('pickInfo'); info.innerHTML = '';
+  const line = (label, value, muted)=>{
+    const d = document.createElement('div');
+    const k = document.createElement('span');
+    k.textContent = label + '：'; k.style.color = 'var(--text-muted)';
+    const v = document.createElement('span');
+    v.textContent = value || '（未填）';
+    v.style.color = (value ? (muted ? 'var(--text)' : 'var(--gold)') : 'var(--text-muted)');
+    d.appendChild(k); d.appendChild(v); info.appendChild(d);
+  };
+  line('訂單編號', order.orderNo);
+  if(isStorePickup(order.shipping)){
+    line(order.shipping + ' 收件人', order.recipient, true);
+    line('收件人電話', order.recipientPhone, true);
+    line('取貨門市', order.pickupStore, true);
+  }
+
   const body = document.getElementById('pickBody'); body.innerHTML = '';
 
   const items = Array.isArray(order.items) ? order.items : null;
@@ -2794,6 +2827,17 @@ function renderOrders(){
       const mp = document.createElement('input'); mp.type = 'text'; mp.value = order.meetPlace || ''; mp.placeholder = '面交地點'; mp.className = 'cell-input'; mp.style.cssText = 'font-size:12px;';
       mp.addEventListener('change', ()=>{ order.meetPlace = mp.value.trim(); persist(); });
       mw.appendChild(mt); mw.appendChild(mp); tdShipping.appendChild(mw);
+    }
+    if(isStorePickup(order.shipping)){
+      const sw = document.createElement('div'); sw.style.cssText = 'margin-top:5px;display:flex;flex-direction:column;gap:4px;';
+      [['recipient','收件人姓名'], ['recipientPhone','收件人電話'], ['pickupStore','取貨門市']].forEach(([key, ph])=>{
+        const inp = document.createElement('input'); inp.type = 'text';
+        inp.value = order[key] || ''; inp.placeholder = ph; inp.title = ph;
+        inp.className = 'cell-input'; inp.style.cssText = 'font-size:12px;';
+        inp.addEventListener('change', ()=>{ order[key] = inp.value.trim(); persist(); });
+        sw.appendChild(inp);
+      });
+      tdShipping.appendChild(sw);
     }
     tr.appendChild(tdShipping);
 
