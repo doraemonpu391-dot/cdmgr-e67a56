@@ -2872,9 +2872,16 @@ function renderOrders(){
     });
     const delBtn = document.createElement('button'); delBtn.className = 'danger-ghost'; delBtn.textContent = '刪除';
     delBtn.addEventListener('click', async ()=>{
-      if(!(await uiConfirm('確定要刪除這筆訂單嗎？此動作無法復原。'))) return;
+      const toRestore = listingsToRestore(order);
+      const msg = toRestore.length
+        ? `確定要刪除這筆訂單嗎？此動作無法復原。訂單內的 ${toRestore.length} 件商品會恢復為「在售」。`
+        : '確定要刪除這筆訂單嗎？此動作無法復原。（這筆訂單沒有可自動恢復上架的商品）';
+      if(!(await uiConfirm(msg))) return;
+      toRestore.forEach(l => { l.status = '在售'; l.archived = false; });
       orders = orders.filter(o => o.id !== order.id);
-      await saveKey('orders', orders); renderOrders();
+      await saveKey('orders', orders);
+      if(toRestore.length) await saveKey('listings', listings);
+      renderOrders(); renderListings();
     });
     actionsWrap.appendChild(completeBtn); actionsWrap.appendChild(delBtn);
     tdActions.appendChild(actionsWrap); tr.appendChild(tdActions);
@@ -2911,6 +2918,15 @@ function setListingsArchived(order, archived){
     if(ids.has(l.id) && !!l.archived !== archived){ l.archived = archived; changed = true; }
   });
   return changed;
+}
+
+// 刪除訂單時要放回上架清單的商品。只挑「還停在已售出（或被封存）」的那些——
+// 如果你事後手動把某片改成已下架/保留中，那是刻意的，刪訂單不該把它翻回在售。
+// 沒有 items 快照的舊訂單無從得知賣了哪幾片，回空陣列（確認視窗會照實說）。
+function listingsToRestore(order){
+  const ids = new Set((order && order.items || []).map(it => it.id).filter(Boolean));
+  if(ids.size === 0) return [];
+  return listings.filter(l => ids.has(l.id) && l.status === '已售出');
 }
 
 // 封存訂單顯示用：每個專輯後面帶括號標價（從成本快照 items 取，涵蓋舊訂單）；無 items 則回退原 content。
