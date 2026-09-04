@@ -451,6 +451,7 @@
       <div class="toolbar">
         <input type="text" id="listingSearch" class="search-input" placeholder="搜尋藝人／專輯...">
         <select id="filterStatus" class="status-select" title="依狀態篩選"><option value="">狀態：全部</option><option value="在售">在售</option><option value="保留中">保留中</option><option value="已售出">已售出</option><option value="已下架">已下架</option></select>
+        <select id="filterReserved" class="status-select" title="依「保留給誰」篩選（只有後台看得到）" style="max-width:150px;"><option value="">保留給：全部</option></select>
         <select id="filterPlatform" class="status-select" title="依上架平台篩選"><option value="">平台：全部</option><option value="Facebook Marketplace">Facebook Marketplace</option><option value="Yahoo拍賣">Yahoo拍賣</option><option value="旋轉拍賣">旋轉拍賣</option><option value="Discogs">Discogs</option><option value="Threads">Threads</option><option value="Instagram">Instagram</option><option value="__none__">未設定平台</option></select>
         <select id="filterSource" class="status-select" title="依貨源篩選"><option value="">貨源：全部</option></select>
         <select id="filterRegion" class="status-select" title="依地區／語言篩選" style="max-width:132px;"><option value="">地區：全部</option></select>
@@ -1876,6 +1877,7 @@ function getFilteredListings(){
   const fRegion = document.getElementById('filterRegion').value;
   const fGenre = document.getElementById('filterGenre').value;
   const fSub = document.getElementById('filterSub').value;
+  const fReserved = document.getElementById('filterReserved').value;
   return listings.filter(l=>{
     // 已完成訂單（封存）的商品從上架清單隱藏，避免賣完的商品一直卡著
     if(l.archived) return false;
@@ -1884,6 +1886,8 @@ function getFilteredListings(){
     if(fPlatform === '__none__'){ if(l.platforms && l.platforms.length) return false; }
     else if(fPlatform && !(l.platforms||[]).includes(fPlatform)) return false;
     if(fSource && (l.source||'') !== fSource) return false;
+    // 保留給誰：私密欄位，選一個人就能把他的保留品一次挑出來勾選成立訂單
+    if(fReserved && (l.reservedFor||'').trim() !== fReserved) return false;
     // 三軸各自獨立篩選（可疊加）
     if(fRegion && (l.regions||[]).indexOf(fRegion) === -1) return false;
     if(fGenre && (l.genres||[]).indexOf(fGenre) === -1) return false;
@@ -1902,6 +1906,14 @@ function refreshFilterOptions(){
     values.forEach(v=> sel.appendChild(optionEl(v, v, current)));
     if(values.includes(current)) sel.value = current;
   })();
+  // 保留給：單一字串欄，只列實際填過的人
+  (function(){
+    const sel = document.getElementById('filterReserved'); const current = sel.value;
+    const values = Array.from(new Set(listings.filter(l=>!l.archived).map(l=>(l.reservedFor||'').trim()).filter(Boolean))).sort();
+    sel.innerHTML = ''; sel.appendChild(optionEl('', '保留給：全部'));
+    values.forEach(v=> sel.appendChild(optionEl(v, v, current)));
+    if(values.includes(current)) sel.value = current;
+  })();
   // 三軸各自建立選項（只列該軸實際用到的值）
   [['filterRegion','regions','地區'], ['filterGenre','genres','大類'], ['filterSub','subgenres','子曲風']].forEach(([selId, key, label])=>{
     const sel = document.getElementById(selId); const current = sel.value;
@@ -1912,18 +1924,18 @@ function refreshFilterOptions(){
     values.forEach(v=> sel.appendChild(optionEl(v, v, current)));
     if(values.includes(current)) sel.value = current;
   });
-  const anyActive = ['filterStatus','filterPlatform','filterSource','filterRegion','filterGenre','filterSub'].some(id=>document.getElementById(id).value)
+  const anyActive = ['filterStatus','filterPlatform','filterSource','filterReserved','filterRegion','filterGenre','filterSub'].some(id=>document.getElementById(id).value)
     || document.getElementById('listingSearch').value.trim() !== '';
   document.getElementById('clearFiltersBtn').style.display = anyActive ? 'inline-block' : 'none';
 }
 
 document.getElementById('listingSearch').addEventListener('input', renderListings);
-['filterStatus','filterPlatform','filterSource','filterRegion','filterGenre','filterSub'].forEach(id=>{
+['filterStatus','filterPlatform','filterSource','filterReserved','filterRegion','filterGenre','filterSub'].forEach(id=>{
   document.getElementById(id).addEventListener('change', renderListings);
 });
 document.getElementById('clearFiltersBtn').addEventListener('click', ()=>{
   document.getElementById('listingSearch').value = '';
-  ['filterStatus','filterPlatform','filterSource','filterRegion','filterGenre','filterSub'].forEach(id=>{ document.getElementById(id).value = ''; });
+  ['filterStatus','filterPlatform','filterSource','filterReserved','filterRegion','filterGenre','filterSub'].forEach(id=>{ document.getElementById(id).value = ''; });
   renderListings();
 });
 
