@@ -2531,6 +2531,93 @@ function uiPickOrder(message, list){
   });
 }
 
+// 從一筆訂單的明細挑一件（移除商品用）。回傳 index 字串，取消回 null。
+function uiPickItem(message, items){
+  return new Promise(resolve=>{
+    const overlay = document.getElementById('modalOverlay');
+    const box = overlay.querySelector('.modal-box');
+    const actions = document.getElementById('modalActions');
+    document.getElementById('modalMsg').textContent = message;
+    actions.innerHTML = '';
+    const sel = document.createElement('select');
+    sel.className = 'status-select';
+    sel.style.cssText = 'width:100%;margin-bottom:18px;';
+    items.forEach((it, i)=>{
+      sel.appendChild(optionEl(String(i), (it.name || '(未命名)') + '　' + fmtMoney(it.price || 0)));
+    });
+    box.insertBefore(sel, actions);
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'ghost'; cancelBtn.textContent = '取消';
+    const okBtn = document.createElement('button');
+    okBtn.className = 'primary'; okBtn.style.cssText = 'font-size:14px;padding:9px 20px;'; okBtn.textContent = '下一步';
+    const close = (val)=>{ overlay.classList.remove('show'); sel.remove(); resolve(val); };
+    cancelBtn.addEventListener('click', ()=>close(null));
+    okBtn.addEventListener('click', ()=>close(sel.value));
+    actions.appendChild(cancelBtn); actions.appendChild(okBtn);
+    overlay.classList.add('show');
+  });
+}
+
+// 加購與移除都要算「件數/金額變動有沒有跨過優惠門檻」，規則必須完全一致，所以共用這支。
+function orderPromoFor(items, shipping){
+  const fee = shipFeeOf(shipping);
+  const all = (items || []).map(it => ({
+    price: parseFloat(it.price) || 0,
+    // 舊快照沒存 noPromo，退回查目前的商品資料；查不到就當作參與優惠
+    noPromo: (it.noPromo !== undefined) ? !!it.noPromo
+             : !!((listings.find(l => l.id === it.id) || {}).noPromo)
+  }));
+  const okItems = all.filter(it => !it.noPromo && it.price > 0);
+  const fullSub = all.reduce((s, it) => s + it.price, 0);
+  const okSub = okItems.reduce((s, it) => s + it.price, 0);
+  return computePromo(okItems.length, okSub, promoRules, fee, fullSub);
+}
+
+// 從進行中訂單移除一件商品，該商品退回「在售」。加購的反向操作，金額算法對稱：
+// 扣掉商品標價，再把「因為件數/金額變少而失去的優惠」加回來。
+async function removeItemFromOrder(order){
+  const items = Array.isArray(order.items) ? order.items : null;
+  if(!items || items.length === 0){
+    await uiAlert('這筆訂單沒有商品明細（今年 7 月以前的舊訂單），無法逐件移除。\n請直接編輯「訂單內容」文字，並手動把商品狀態改回「在售」。');
+    return;
+  }
+  const idx = await uiPickItem(`要從「${order.buyer || '未填買家'}」的訂單移除哪一件？`, items);
+  if(idx === null) return;
+  const i = parseInt(idx, 10);
+  const item = items[i];
+  if(!item) return;
+
+  const price = parseFloat(item.price) || 0;
+  const cost = parseFloat(item.cost) || 0;
+  const curAmount = parseFloat(order.amount) || 0;
+  const curCost = parseFloat(order.totalCost);
+  const rest = items.slice(0, i).concat(items.slice(i + 1));
+  const lostDiscount = Math.max(0,
+    orderPromoFor(items, order.shipping).discount - orderPromoFor(rest, order.shipping).discount);
+  const newAmount = Math.max(0, curAmount - price + lostDiscount);
+
+  const listing = listings.find(l => l.id === item.id);
+  let msg = `從「${order.buyer || '未填買家'}」的訂單移除：\n・${item.name || '(未命名)'}　${fmtMoney(price)}\n`
+    + `\n金額　${fmtMoney(curAmount)} → ${fmtMoney(newAmount)}`;
+  if(lostDiscount > 0) msg += `\n優惠　件數變少、跨回門檻以下，加回 ${fmtMoney(lostDiscount)}`;
+  if(isFinite(curCost)) msg += `\n成本　${fmtMoney(curCost)} → ${fmtMoney(Math.max(0, curCost - cost))}`;
+  msg += listing
+    ? (listing.status === '已售出' ? '\n商品　退回「在售」，重新出現在上架清單' : `\n商品　目前是「${listing.status}」，是你手動改過的，不會動它`)
+    : '\n商品　已不在上架清單（可能被刪除了），只會從訂單移除';
+  if(rest.length === 0) msg += '\n\n⚠ 這是這筆訂單的最後一件，移除後訂單會變成空的（可以直接刪掉那筆訂單）。';
+  if(!(await uiConfirm(msg))) return;
+
+  order.items = rest;
+  order.content = rest.map(it => it.name).join('、');
+  order.amount = String(newAmount);
+  if(isFinite(curCost)) order.totalCost = Math.max(0, curCost - cost);
+  if(listing && listing.status === '已售出'){ setListingStatus(listing, '在售'); listing.archived = false; }
+
+  await saveKey('orders', orders);
+  if(listing) await saveKey('listings', listings);
+  renderOrders(); renderListings(); updateOrderStats();
+}
+
 // 客人加購：把勾選的商品併進一筆進行中的訂單。
 // 刻意複用上架清單既有的搜尋/篩選/勾選（selectedListingIds），不另做一套選商品 UI。
 document.getElementById('addToOrderBtn').addEventListener('click', async ()=>{
@@ -2573,21 +2660,8 @@ document.getElementById('addToOrderBtn').addEventListener('click', async ()=>{
   // 加購後件數／金額變了，可能跨過「每 N 件折 M」或「滿額免運」的門檻。
   // 用「加購前後的折扣差額」而不是整份重算——重算會把手動改過的金額蓋掉
   // （實測 7 筆進行中訂單有 3 筆金額是手動調過的）。
-  const fee = shipFeeOf(order.shipping);
-  const promoFor = (items)=>{
-    const all = (items || []).map(it => ({
-      price: parseFloat(it.price) || 0,
-      // 舊快照沒存 noPromo，退回查目前的商品資料；查不到就當作參與優惠
-      noPromo: (it.noPromo !== undefined) ? !!it.noPromo
-               : !!((listings.find(l => l.id === it.id) || {}).noPromo)
-    }));
-    const okItems = all.filter(it => !it.noPromo && it.price > 0);
-    const fullSub = all.reduce((s, it) => s + it.price, 0);
-    const okSub = okItems.reduce((s, it) => s + it.price, 0);
-    return computePromo(okItems.length, okSub, promoRules, fee, fullSub);
-  };
-  const oldPromo = promoFor(order.items || []);
-  const newPromo = promoFor((order.items || []).concat(newItems));
+  const oldPromo = orderPromoFor(order.items || [], order.shipping);
+  const newPromo = orderPromoFor((order.items || []).concat(newItems), order.shipping);
   const extraDiscount = Math.max(0, newPromo.discount - oldPromo.discount);
 
   const skipped = [];
@@ -2836,6 +2910,13 @@ function renderOrders(){
     pickBtn.style.flexShrink = '0';
     pickBtn.addEventListener('click', ()=> openPickModal(order));
     contentWrap.appendChild(pickBtn);
+    const rmBtn = document.createElement('button');
+    rmBtn.className = 'small-icon'; rmBtn.type = 'button';
+    rmBtn.textContent = '➖'; rmBtn.title = '移除訂單內的某一件商品（退回「在售」）';
+    rmBtn.setAttribute('aria-label', '移除訂單內商品');
+    rmBtn.style.flexShrink = '0';
+    rmBtn.addEventListener('click', ()=> removeItemFromOrder(order));
+    contentWrap.appendChild(rmBtn);
     tdContent.appendChild(contentWrap); tr.appendChild(tdContent);
     const tdAmount = document.createElement('td'); tdAmount.appendChild(makeNumberInput(order.amount, v=>{ order.amount=v; persist(); updateOrderStats(); })); tr.appendChild(tdAmount);
     const tdCost = document.createElement('td'); tdCost.appendChild(makeNumberInput(order.totalCost, v=>{ order.totalCost = (v===''?'':(parseFloat(v)||0)); persist(); })); tr.appendChild(tdCost);
