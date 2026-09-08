@@ -288,7 +288,20 @@
     </div>
     <div id="ghRow" style="display:none;margin-top:12px;">
       <label class="field" style="display:block;font-size:12px;color:var(--gold);margin-bottom:4px;">手機發布用 GitHub Token（fine-grained，只給 <b>cd-shop-manager</b> 這個 repo 的 Contents 讀寫權限）。設定後手機也能按「發布商品頁」。</label>
-      <input type="password" id="ghTokenInput" placeholder="github_pat_..." autocomplete="off" style="width:100%;background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;">
+      <div id="ghSetRow" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;">
+        <code id="ghMasked" style="color:var(--gold);font-family:'JetBrains Mono',monospace;font-size:12.5px;word-break:break-all;"></code>
+        <button class="ghost" type="button" id="ghChangeBtn">更換</button>
+        <button class="ghost" type="button" id="ghClearBtn">清除</button>
+      </div>
+      <div id="ghEditRow" style="display:none;gap:8px;align-items:center;flex-wrap:wrap;">
+        <!-- 刻意不用 type="password"：手機瀏覽器會把它當登入密碼欄，每次開啟都跳自動填入／
+             儲存密碼，一不小心就把金鑰蓋掉。用一般文字欄＋關掉所有自動行為，平常唯讀顯示遮罩。 -->
+        <input type="text" id="ghTokenInput" placeholder="貼上 github_pat_..." name="arp-publish-key"
+               autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+               style="flex:1;min-width:200px;background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-family:'JetBrains Mono',monospace;font-size:12.5px;">
+        <button class="secondary" type="button" id="ghSaveBtn">儲存</button>
+        <button class="ghost" type="button" id="ghCancelBtn">取消</button>
+      </div>
     </div>
     <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
       <button class="secondary" id="backupBtn">備份資料</button>
@@ -1995,6 +2008,7 @@ function renderListings(){
 
   const buildRow = (item)=>{
     const tr = document.createElement('tr');
+    tr.dataset.id = item.id;
 
     const tdSel = document.createElement('td');
     const selCb = document.createElement('input');
@@ -2050,6 +2064,13 @@ function renderListings(){
       resInput.addEventListener('change', async ()=>{ item.reservedFor = resInput.value.trim(); await saveKey('listings', listings); });
       resWrap.appendChild(lock); resWrap.appendChild(resInput);
       tdName.appendChild(resWrap);
+    } else if(item.reservedFor){
+      // 已售出但還留著保留備註：唯讀顯示，不要變成看不見卻存在的資料
+      const past = document.createElement('div');
+      past.textContent = '🔒 曾保留給 ' + item.reservedFor;
+      past.title = '狀態改回「保留中」即可編輯；改成在售／已下架會自動清除';
+      past.style.cssText = 'margin-top:5px;font-size:11px;color:var(--text-muted);';
+      tdName.appendChild(past);
     }
     tr.appendChild(tdName);
 
@@ -2138,7 +2159,7 @@ function renderListings(){
     const tdStatus = document.createElement('td');
     const statusSel = document.createElement('select'); statusSel.className = 'status-select';
     LISTING_STATUSES.forEach(s => statusSel.appendChild(optionEl(s, s, item.status)));
-    statusSel.addEventListener('change', async ()=>{ item.status = statusSel.value; await saveKey('listings', listings); updateListingStats(); renderListings(); });
+    statusSel.addEventListener('change', async ()=>{ setListingStatus(item, statusSel.value); await saveKey('listings', listings); updateListingStats(); renderListings(); });
     tdStatus.appendChild(statusSel); tr.appendChild(tdStatus);
 
     const tdActions = document.createElement('td');
@@ -2277,7 +2298,7 @@ document.getElementById('confirmRelistBtn').addEventListener('click', async ()=>
     // 否則整批商品會冒出沒人授權的折扣標籤。這個面板看不到原價欄，所以必須主動清。
     if(newPrice !== ''){ item.price = newPrice; item.origPrice = ''; }
     item.platforms = newPlatforms;
-    item.status = '在售';
+    setListingStatus(item, '在售');
     item.dateAdded = todayStr();
     if(bidMode === '直購'){
       item.biddingType = '直購';
@@ -2385,7 +2406,7 @@ document.getElementById('confirmEditBtn').addEventListener('click', async ()=>{
     else if(promoMode === 'yes') item.noPromo = false;
     if(publicMode === 'no') item.notPublic = true;
     else if(publicMode === 'yes') item.notPublic = false;
-    if(status !== 'keep') item.status = status;
+    if(status !== 'keep') setListingStatus(item, status);
   });
   await saveKey('listings', listings);
   refreshTaxonomyDatalists();
@@ -2877,7 +2898,7 @@ function renderOrders(){
         ? `確定要刪除這筆訂單嗎？此動作無法復原。訂單內的 ${toRestore.length} 件商品會恢復為「在售」。`
         : '確定要刪除這筆訂單嗎？此動作無法復原。（這筆訂單沒有可自動恢復上架的商品）';
       if(!(await uiConfirm(msg))) return;
-      toRestore.forEach(l => { l.status = '在售'; l.archived = false; });
+      toRestore.forEach(l => { setListingStatus(l, '在售'); l.archived = false; });
       orders = orders.filter(o => o.id !== order.id);
       await saveKey('orders', orders);
       if(toRestore.length) await saveKey('listings', listings);
@@ -2923,6 +2944,14 @@ function setListingsArchived(order, archived){
 // 刪除訂單時要放回上架清單的商品。只挑「還停在已售出（或被封存）」的那些——
 // 如果你事後手動把某片改成已下架/保留中，那是刻意的，刪訂單不該把它翻回在售。
 // 沒有 items 快照的舊訂單無從得知賣了哪幾片，回空陣列（確認視窗會照實說）。
+// 「保留給誰」只在「保留中」時有意義。改成在售／已下架＝取消保留，值要一起清掉——
+// 只把輸入框藏起來會留下看不見的資料，下次再設保留就冒出上一個人的名字。
+// 已售出不清：那是保留成立、東西賣掉了，那筆備註還有查對價值（列上會唯讀顯示）。
+function setListingStatus(item, status){
+  item.status = status;
+  if(status === '在售' || status === '已下架') item.reservedFor = '';
+}
+
 function listingsToRestore(order){
   const ids = new Set((order && order.items || []).map(it => it.id).filter(Boolean));
   if(ids.size === 0) return [];
@@ -3342,6 +3371,12 @@ document.getElementById('backupBtn').addEventListener('click', async ()=>{
 // 交給原生層寫檔並 git push 到 GitHub Pages。
 const publishShopBtnEl = document.getElementById('publishShopBtn');
 const GH_OWNER = 'doraemonpu391-dot', GH_REPO = 'cd-shop-manager', GH_BRANCH = 'main';
+// 平常只顯示遮罩：看得出有沒有設、是不是同一支，但不會讓人手滑改到內容。
+function maskToken(t){
+  t = String(t || '');
+  if(!t) return '';
+  return (t.length <= 16) ? '••••••••' : t.slice(0, 11) + '……' + t.slice(-4) + '（共 ' + t.length + ' 字）';
+}
 async function loadGhToken(){ const a = await loadKey('ghToken'); return (Array.isArray(a) && a[0]) ? String(a[0]) : ''; }
 async function saveGhToken(v){ await saveKey('ghToken', [v || '']); }
 
@@ -3793,8 +3828,33 @@ async function setupMobilePublishUI(){
   const row = document.getElementById('ghRow'), inp = document.getElementById('ghTokenInput');
   if(row && inp){
     row.style.display = 'block';
-    inp.value = await loadGhToken();
-    inp.addEventListener('change', ()=> saveGhToken(inp.value.trim()));
+    const setRow = document.getElementById('ghSetRow'), editRow = document.getElementById('ghEditRow');
+    const masked = document.getElementById('ghMasked');
+    const show = (tok)=>{
+      if(tok){
+        masked.textContent = maskToken(tok);
+        setRow.style.display = 'flex'; editRow.style.display = 'none';
+      } else {
+        inp.value = '';
+        setRow.style.display = 'none'; editRow.style.display = 'flex';
+      }
+    };
+    show(await loadGhToken());
+    document.getElementById('ghChangeBtn').addEventListener('click', ()=>{
+      inp.value = ''; setRow.style.display = 'none'; editRow.style.display = 'flex'; inp.focus();
+    });
+    document.getElementById('ghClearBtn').addEventListener('click', async ()=>{
+      if(!(await uiConfirm('確定要清除這支金鑰嗎？清除後手機就不能按「發布商品頁」了。'))) return;
+      await saveGhToken(''); show('');
+    });
+    document.getElementById('ghSaveBtn').addEventListener('click', async ()=>{
+      const v = inp.value.trim();
+      if(!v){ alert('請先貼上金鑰'); return; }
+      await saveGhToken(v); show(v);
+    });
+    document.getElementById('ghCancelBtn').addEventListener('click', async ()=>{
+      show(await loadGhToken());     // 取消＝不動原本那支
+    });
   }
   const btn = document.getElementById('publishShopBtn');
   if(btn) btn.style.display = 'inline-block';
