@@ -2592,8 +2592,9 @@ async function removeItemFromOrder(order){
   const curAmount = parseFloat(order.amount) || 0;
   const curCost = parseFloat(order.totalCost);
   const rest = items.slice(0, i).concat(items.slice(i + 1));
+  const restPromo = orderPromoFor(rest, order.shipping);
   const lostDiscount = Math.max(0,
-    orderPromoFor(items, order.shipping).discount - orderPromoFor(rest, order.shipping).discount);
+    orderPromoFor(items, order.shipping).discount - restPromo.discount);
   const newAmount = Math.max(0, curAmount - price + lostDiscount);
 
   const listing = listings.find(l => l.id === item.id);
@@ -2610,6 +2611,7 @@ async function removeItemFromOrder(order){
   order.items = rest;
   order.content = rest.map(it => it.name).join('、');
   order.amount = String(newAmount);
+  order.shipDiscount = restPromo.freeShip ? shipFeeOf(order.shipping) : 0;
   if(isFinite(curCost)) order.totalCost = Math.max(0, curCost - cost);
   if(listing && listing.status === '已售出'){ setListingStatus(listing, '在售'); listing.archived = false; }
 
@@ -2695,6 +2697,7 @@ document.getElementById('addToOrderBtn').addEventListener('click', async ()=>{
     order.content = base ? base + '、' + names : names;
   }
   order.amount = String(curAmount + addAmount - extraDiscount);
+  order.shipDiscount = newPromo.freeShip ? shipFeeOf(order.shipping) : 0;
   if(isFinite(curCost)) order.totalCost = curCost + addCost;
   add.forEach(l => { l.status = '已售出'; });
 
@@ -2766,6 +2769,13 @@ document.getElementById('confirmOrderBtn').addEventListener('click', async ()=>{
     recipientPhone: isStorePickup(document.getElementById('orderShippingSel').value) ? document.getElementById('orderRecipientPhone').value.trim() : '',
     pickupStore: isStorePickup(document.getElementById('orderShippingSel').value) ? document.getElementById('orderPickupStore').value.trim() : '',
     orderNo: document.getElementById('orderNoInput').value.trim(),
+    // 免運折抵掉的運費金額。訂單金額是「已經扣掉它」的內部數字（運費我方吸收），
+    // 但客人實際要付的是沒扣的那個數，揀貨明細要用它加回來，所以存起來。
+    // 不即時重算的原因：事後改運送方式會讓重算結果和當初實際折掉的金額對不上。
+    shipDiscount: (function(){
+      const f = shipFeeOf(document.getElementById('orderShippingSel').value);
+      return computePromo(_promoQty, _promoSub, promoRules, f, _orderSubtotal).freeShip ? f : 0;
+    })(),
     shipStatus: '待出貨',
     paymentStatus: document.getElementById('orderPaymentSel').value || '未付款',
     discount: document.getElementById('orderDiscount').value.trim(),
@@ -2815,6 +2825,14 @@ function makeSelect(options, value, onChange, allowBlank){
   options.forEach(opt => sel.appendChild(optionEl(opt, opt, value)));
   sel.addEventListener('change', ()=> onChange(sel.value));
   return sel;
+}
+
+// 這筆訂單的免運折抵了多少運費。新訂單成立時就存了 shipDiscount；
+// 更早的訂單沒有這個欄位，退回用「目前的優惠規則＋目前的運費表」推算（只能盡力）。
+function orderShipDiscount(order){
+  if(order && order.shipDiscount != null) return Number(order.shipDiscount) || 0;
+  if(!order || !Array.isArray(order.items) || !order.items.length) return 0;
+  return orderPromoFor(order.items, order.shipping).freeShip ? (shipFeeOf(order.shipping) || 0) : 0;
 }
 
 // 揀貨明細彈窗：把一筆訂單的商品逐項列出，備貨時可勾選核對（全 textContent，防注入）
@@ -2880,9 +2898,15 @@ function openPickModal(order){
   });
 
   const sum = items ? items.reduce((s,it)=> s + (parseFloat(it.price)||0), 0) : null;
+  // 這個彈窗會截圖給客人看。order.amount 是「已經扣掉免運運費」的內部數字（運費我方吸收），
+  // 直接給客人看會短收運費那一段，所以這裡顯示「客人應付」＝訂單金額把免運折抵加回來，
+  // 並在後面標註（免運）讓客人知道運費不用另外付。內部的訂單金額只留在訂單表。
+  const shipCut = orderShipDiscount(order);
+  const payable = (order.amount === '' || order.amount == null) ? null
+                : (parseFloat(order.amount) || 0) + shipCut;
   document.getElementById('pickTotal').textContent =
     `共 ${rows.length} 件` + (sum != null ? `　商品合計 ${fmtMoney(sum)}` : '')
-    + (order.amount ? `　訂單金額 ${fmtMoney(order.amount)}` : '');
+    + (payable != null ? `　應付金額 ${fmtMoney(payable)}` + (shipCut > 0 ? '（免運）' : '') : '');
   pickOverlayEl.classList.add('show');
 }
 
