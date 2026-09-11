@@ -821,7 +821,7 @@ const BID_TYPES = ['競標', '直購'];
 
 // 三軸曲風分類（Discogs 式）：地區/語言、大類 Genre、子曲風 Sub-genre。皆受控清單可自訂複選。
 const REGION_OPTIONS = ['華語', '台語', '粵語', '西洋', '日本', '韓國', '其他'];
-const GENRE_OPTIONS  = ['Pop', 'Rock', 'Metal', 'Electronic', 'Hip-Hop/R&B', 'Jazz', 'Classical', 'Folk/Country', 'Soundtrack/Stage', 'Enka/Traditional', 'Other'];
+const GENRE_OPTIONS  = ['Pop', 'Rock', 'Metal', 'Electronic', 'Hip-Hop/R&B', 'Funk/Soul', 'Jazz', 'Classical', 'Folk/Country', 'Soundtrack/Stage', 'Enka/Traditional', 'Other'];
 // 大類正規化：舊中文值換成英文；並把已更名的舊英文值(Soundtrack→Soundtrack/Stage)一併遷移。
 // 只換完全相符的已知標籤，自訂值不動。
 const GENRE_ZH_TO_EN = {
@@ -873,18 +873,26 @@ function migrateTaxonomy(list){
   });
   return changed;
 }
-// 填三軸 datalist 建議：地區/大類用受控常數，子曲風用既有資料的既有值。
+// 填三軸 datalist 建議。大類與子曲風都會把「資料裡出現過的值」一起列進來，
+// 所以直接打一個新的大類，下次就自己出現在建議清單，不必改程式加常數。
+// 大類的受控常數排在前面（維持熟悉的順序），資料裡多出來的值接在後面。
 function refreshTaxonomyDatalists(){
-  var subSet = {};
-  listings.forEach(function(l){ (l.subgenres||[]).forEach(function(s){ if(s) subSet[s]=1; }); });
+  var collect = function(key){
+    var set = {};
+    listings.forEach(function(l){ (l[key]||[]).forEach(function(v){ if(v) set[v]=1; }); });
+    return set;
+  };
+  var zh = function(a,b){ return a.localeCompare(b,'zh-Hant'); };
+  var genreSet = collect('genres');
+  GENRE_OPTIONS.forEach(function(g){ delete genreSet[g]; });   // 常數已經在清單裡，不要重複
   var fill = function(id, arr){
     var dl = document.getElementById(id); if(!dl) return;
     dl.innerHTML = '';
     arr.forEach(function(v){ var o=document.createElement('option'); o.value=v; dl.appendChild(o); });
   };
   fill('regionOptions', REGION_OPTIONS);
-  fill('genreOptions', GENRE_OPTIONS);
-  fill('subOptions', Object.keys(subSet).sort(function(a,b){ return a.localeCompare(b,'zh-Hant'); }));
+  fill('genreOptions', GENRE_OPTIONS.concat(Object.keys(genreSet).sort(zh)));
+  fill('subOptions', Object.keys(collect('subgenres')).sort(zh));
 }
 // 上架清單表格顯示用：三軸合併成一段文字。
 function listingTaxonomyText(l){
@@ -1996,6 +2004,10 @@ function renderListings(){
   const tbody = document.getElementById('listingsBody');
   tbody.innerHTML = '';
   refreshFilterOptions();
+  // 建議清單跟著資料走：擺在這裡就涵蓋所有會改到 listings 的路徑（快速新增、批次編輯、
+  // 貼上匯入、同步合併…），不必每條路徑各記得呼叫一次——漏掉的那條就會讓新打的大類
+  // 要重開 App 才出現。
+  refreshTaxonomyDatalists();
   const visible = getFilteredListings();
 
   if(visible.length === 0){
@@ -2409,7 +2421,6 @@ document.getElementById('confirmEditBtn').addEventListener('click', async ()=>{
     if(status !== 'keep') setListingStatus(item, status);
   });
   await saveKey('listings', listings);
-  refreshTaxonomyDatalists();
   resetEditPanel();
   selectedListingIds.clear();
   renderListings();
