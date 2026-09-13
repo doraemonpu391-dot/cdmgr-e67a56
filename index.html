@@ -1488,7 +1488,13 @@ async function generateComposite(){
 }
 
 // ---- Captions (with / without AI intro) ----
-const CAPTION_HEADER = `【CD 出清販售】`;
+// 兩個版本的標題都帶當日日期（MMDD），複製貼上後不必再自己補一次。
+// 長版（含簡介）用私人帳號發 FB 社團，維持「出清」的口吻；
+// 短版（無簡介）用商家帳號發，改成「上架」，不再是私人出清收藏的角度。
+// 日期走 todayStr()（本地時區），不要自己 new Date().getMonth()，跨日會和系統其他地方對不上。
+function captionHeader(shortVer){
+  return `【二手CD${shortVer ? '上架' : '出清'}-${todayStr().slice(5).replace('-', '')}】`;
+}
 const CAPTION_FOOTER = `交易方式7-11/全家+60或板橋面交自取，可賣貨便，有興趣或想詳細看片況請留言或私訊詢問！`;
 // 導流到商品頁的行動呼籲（附永久短網址）
 const SHOP_SHORT_URL = 'https://tinyurl.com/arprecordstw';
@@ -1501,7 +1507,9 @@ function composerItemsWithIndex(){
 }
 
 // Build a full caption. introBySlot maps composerState slot index → intro text.
-function buildCaptionFromIntros(introBySlot){
+// shortHeader=true → 無簡介版（商家帳號用）。刻意用明確參數而不是「introBySlot 是不是空的」
+// 來判斷：簡介抓取失敗時長版也會是空的，靠推斷會把長版的標題也換掉。
+function buildCaptionFromIntros(introBySlot, shortHeader){
   const items = composerItemsWithIndex();
   if(items.length === 0) return '（尚未填寫任何商品資訊）';
   const blocks = items.map((o, i)=>{
@@ -1516,7 +1524,7 @@ function buildCaptionFromIntros(introBySlot){
     if(s.notes) block += `\n　備注：${s.notes}`;
     return block;
   });
-  return `${CAPTION_HEADER}\n\n${blocks.join('\n\n')}\n\n${CAPTION_FOOTER}\n\n${CAPTION_CTA}`;
+  return `${captionHeader(shortHeader)}\n\n${blocks.join('\n\n')}\n\n${CAPTION_FOOTER}\n\n${CAPTION_CTA}`;
 }
 
 async function fetchAlbumIntro(artist, album){
@@ -1547,7 +1555,7 @@ async function generateCaptions(onProgress){
   ));
 
   const withIntro = buildCaptionFromIntros(introBySlot);
-  const noIntro = buildCaptionFromIntros({});
+  const noIntro = buildCaptionFromIntros({}, true);
   return {withIntro, noIntro};
 }
 
@@ -1728,7 +1736,7 @@ document.getElementById('parseAIIntroBtn').addEventListener('click', async ()=>{
   document.getElementById('captionWithIntro').value = buildCaptionFromIntros(introBySlot);
   // Ensure the no-intro version is also available
   if(!document.getElementById('captionNoIntro').value.trim()){
-    document.getElementById('captionNoIntro').value = buildCaptionFromIntros({});
+    document.getElementById('captionNoIntro').value = buildCaptionFromIntros({}, true);
   }
   document.getElementById('composerOutputs').classList.add('show');
 
