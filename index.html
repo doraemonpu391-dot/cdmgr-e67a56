@@ -211,6 +211,20 @@
     </div>
   </div>
 </div>
+<div class="modal-overlay" id="pickAllOverlay">
+  <div class="modal-box" style="max-width:600px;">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:4px;">
+      <h3 style="margin:0;font-size:17px;color:var(--gold);font-weight:600;">揀貨總覽</h3>
+      <span class="muted-small" id="pickAllMeta"></span>
+    </div>
+    <div class="muted-small" style="margin-bottom:10px;">所有尚未出貨訂單的商品，依品名排序好一次揀完；右側標的是買家。勾選僅供對照，不會儲存。</div>
+    <div id="pickAllBody" style="max-height:56vh;overflow:auto;"></div>
+    <div id="pickAllTotal" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:13.5px;"></div>
+    <div class="modal-actions" style="margin-top:14px;">
+      <button class="primary" id="pickAllClose" style="font-size:14px;padding:9px 20px;">關閉</button>
+    </div>
+  </div>
+</div>
 <div class="wrap">
 
   <header>
@@ -615,7 +629,10 @@
       </div>
       <div class="row-between">
         <h2>進行中訂單 <span class="count" id="orderCountLabel">(0)</span></h2>
-        <button class="primary" id="addOrderBtn">＋ 新增訂單</button>
+        <div class="dl-row">
+          <button class="secondary" id="pickAllBtn" title="一次列出所有尚未出貨訂單的商品，方便一趟揀完">📋 揀貨總覽</button>
+          <button class="primary" id="addOrderBtn">＋ 新增訂單</button>
+        </div>
       </div>
       <div class="table-scroll">
         <table class="orders-table" id="ordersTable">
@@ -2928,6 +2945,75 @@ function openPickModal(order){
     + (payable != null ? `　應付金額 ${fmtMoney(payable)}` + (shipCut > 0 ? '（免運）' : '') : '');
   pickOverlayEl.classList.add('show');
 }
+
+// 揀貨總覽：把所有「尚未出貨」訂單的商品攤平成一張依品名排序的清單，
+// 一趟就能把架上的片全部揀完，不必一筆訂單開一次彈窗。
+// 尚未出貨＝不是「已出貨」（含問題件，那些可能要重寄，不該默默漏掉，但會標出來）。
+const pickAllOverlayEl = document.getElementById('pickAllOverlay');
+function closePickAllModal(){ pickAllOverlayEl.classList.remove('show'); }
+document.getElementById('pickAllClose').addEventListener('click', closePickAllModal);
+pickAllOverlayEl.addEventListener('click', (e)=>{ if(e.target === pickAllOverlayEl) closePickAllModal(); });
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && pickAllOverlayEl.classList.contains('show')) closePickAllModal(); });
+
+function pendingPickRows(){
+  const rows = [];
+  orders.forEach(order=>{
+    if(order.shipStatus === '已出貨') return;
+    const buyer = order.buyer || '(未填買家)';
+    const problem = order.shipStatus === '問題件';
+    const items = Array.isArray(order.items) ? order.items : null;
+    if(items && items.length){
+      items.forEach(it => rows.push({ name: it.name || '(未命名)', price: it.price, buyer, problem }));
+    } else {
+      // 沒有明細快照的舊訂單：用訂單內容文字拆行，至少揀得到東西
+      String(order.content || '').split(/[、,]/).map(x=>x.trim()).filter(Boolean)
+        .forEach(n => rows.push({ name: n, price: null, buyer, problem }));
+    }
+  });
+  rows.sort((a,b)=> a.name.localeCompare(b.name, 'zh-Hant') || a.buyer.localeCompare(b.buyer, 'zh-Hant'));
+  return rows;
+}
+
+function openPickAllModal(){
+  const rows = pendingPickRows();
+  const orderCount = orders.filter(o => o.shipStatus !== '已出貨').length;
+  document.getElementById('pickAllMeta').textContent = todayStr();
+  const body = document.getElementById('pickAllBody'); body.innerHTML = '';
+
+  if(rows.length === 0){
+    const p = document.createElement('div'); p.className = 'muted-small';
+    p.textContent = '目前沒有尚未出貨的訂單商品。';
+    body.appendChild(p);
+  }
+  rows.forEach((r, i)=>{
+    const line = document.createElement('label');
+    line.style.cssText = 'display:flex;align-items:flex-start;gap:9px;padding:9px 4px;border-bottom:1px solid #23252f;cursor:pointer;';
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.style.cssText = 'margin-top:3px;flex-shrink:0;';
+    cb.addEventListener('change', ()=>{ line.style.opacity = cb.checked ? '0.45' : '1'; });
+    const num = document.createElement('span');
+    num.textContent = (i+1) + '.'; num.style.cssText = 'color:var(--text-muted);min-width:22px;flex-shrink:0;font-size:13px;';
+    const mid = document.createElement('div'); mid.style.cssText = 'flex:1;min-width:0;';
+    const nm = document.createElement('div'); nm.textContent = r.name; nm.style.cssText = 'font-size:14px;line-height:1.45;';
+    mid.appendChild(nm);
+    const who = document.createElement('div');
+    who.textContent = r.buyer + (r.problem ? '　⚠ 問題件' : '');
+    who.style.cssText = 'font-size:11.5px;color:' + (r.problem ? 'var(--danger)' : 'var(--teal)') + ';margin-top:2px;';
+    mid.appendChild(who);
+    line.appendChild(cb); line.appendChild(num); line.appendChild(mid);
+    if(r.price != null && r.price !== ''){
+      const pr = document.createElement('span');
+      pr.textContent = fmtMoney(r.price);
+      pr.style.cssText = 'color:var(--gold);font-family:"JetBrains Mono",monospace;font-size:13.5px;flex-shrink:0;';
+      line.appendChild(pr);
+    }
+    body.appendChild(line);
+  });
+
+  document.getElementById('pickAllTotal').textContent =
+    `共 ${rows.length} 件　來自 ${orderCount} 筆尚未出貨的訂單`;
+  pickAllOverlayEl.classList.add('show');
+}
+document.getElementById('pickAllBtn').addEventListener('click', openPickAllModal);
 
 function renderOrders(){
   const tbody = document.getElementById('ordersBody'); tbody.innerHTML = '';
