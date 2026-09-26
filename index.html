@@ -71,6 +71,8 @@
   button.primary:disabled{opacity:.45;cursor:not-allowed;}
   button.secondary{background:transparent;border:1px solid var(--teal);color:var(--teal);font-weight:700;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;white-space:nowrap;}
   button.secondary:hover{background:#4fd1c515;}
+  button.link-like{background:none;border:none;padding:0;color:var(--teal);cursor:pointer;font:inherit;text-align:left;}
+  button.link-like:hover{text-decoration:underline;}
   button.ghost{background:transparent;border:1px solid var(--line);color:var(--text-muted);padding:6px 12px;border-radius:7px;cursor:pointer;font-size:12px;white-space:nowrap;}
   button.ghost:hover{border-color:var(--gold);color:var(--gold);}
   button.danger-ghost{background:transparent;border:1px solid var(--danger-deep);color:var(--danger);padding:6px 12px;border-radius:7px;cursor:pointer;font-size:12px;white-space:nowrap;}
@@ -690,6 +692,22 @@
             <span class="copy-hint" id="reportCopyHint">已複製 ✓</span>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div class="panel-card">
+      <h2>售出紀錄查詢</h2>
+      <div class="muted-small" style="margin-bottom:10px;">打買家名字→看他買過什麼；打藝人或專輯→看以前賣多少、賣給誰。點結果裡的買家可直接改查那個人。</div>
+      <div class="toolbar">
+        <input type="text" id="soldSearch" class="search-input" placeholder="買家、藝人或專輯…">
+        <button class="ghost" id="soldClearBtn" style="display:none;">✕ 清除</button>
+      </div>
+      <div id="soldSummary" class="muted-small" style="margin:10px 0 4px;"></div>
+      <div class="table-scroll">
+        <table class="archive-table" id="soldTable" style="display:none;">
+          <thead><tr><th>完成日期</th><th>商品</th><th>售價</th><th>買家</th></tr></thead>
+          <tbody id="soldBody"></tbody>
+        </table>
       </div>
     </div>
 
@@ -3175,6 +3193,94 @@ function orderContentDisplay(order){
   }
   return (order && order.content) || '';
 }
+// 售出紀錄查詢：把封存（與進行中）訂單的商品明細攤平成「一件一列」再過濾。
+// 兩個用途共用同一個查詢：打買家名字＝這位客人買過什麼；打藝人/專輯＝以前賣多少。
+// 關鍵字同時比對「品名」與「買家」，所以不必先選要查哪一種。
+function soldRecords(q){
+  const key = String(q || '').trim().toLowerCase();
+  if(!key) return [];
+  const out = [];
+  const scan = (list, live)=>{
+    list.forEach(o=>{
+      const buyer = (o.buyer || '').trim();
+      const date = live ? (o.date || '') : (o.completedDate || o.date || '');
+      const items = Array.isArray(o.items) ? o.items : null;
+      const rows = items && items.length
+        ? items.map(it => ({ name: it.name || '(未命名)', price: it.price }))
+        // 沒有明細快照的舊訂單：用訂單內容拆行，查得到品名但沒有單價
+        : String(o.content || '').split(/[、,]/).map(x=>x.trim()).filter(Boolean).map(n => ({ name: n, price: null }));
+      const buyerHit = buyer.toLowerCase().indexOf(key) !== -1;
+      rows.forEach(r=>{
+        if(buyerHit || r.name.toLowerCase().indexOf(key) !== -1){
+          out.push({ date, name: r.name, price: r.price, buyer: buyer || '(未填買家)', live });
+        }
+      });
+    });
+  };
+  scan(archive, false);
+  scan(orders, true);          // 進行中的也算「買過」，但會標示出來
+  out.sort((a,b)=> String(b.date).localeCompare(String(a.date)));
+  return out;
+}
+
+function renderSoldSearch(){
+  const q = document.getElementById('soldSearch').value;
+  const rows = soldRecords(q);
+  const tbody = document.getElementById('soldBody'); tbody.innerHTML = '';
+  const table = document.getElementById('soldTable');
+  const summary = document.getElementById('soldSummary');
+  document.getElementById('soldClearBtn').style.display = q.trim() ? 'inline-block' : 'none';
+
+  if(!q.trim()){ table.style.display = 'none'; summary.textContent = ''; return; }
+  if(rows.length === 0){
+    table.style.display = 'none';
+    summary.textContent = '找不到符合「' + q.trim() + '」的售出紀錄。';
+    return;
+  }
+  const priced = rows.filter(r => r.price != null && r.price !== '');
+  const sum = priced.reduce((t, r)=> t + (parseFloat(r.price) || 0), 0);
+  const buyers = {}; rows.forEach(r => { buyers[r.buyer] = 1; });
+  const liveCount = rows.filter(r => r.live).length;
+  summary.textContent = `找到 ${rows.length} 件`
+    + `（${Object.keys(buyers).length} 位買家`
+    + (liveCount ? `、其中 ${liveCount} 件在進行中訂單` : '') + '）'
+    + (priced.length ? `　合計 ${fmtMoney(sum)}　平均單價 ${fmtMoney(Math.round(sum / priced.length))}` : '');
+
+  rows.forEach(r=>{
+    const tr = document.createElement('tr');
+    const td = (text)=>{ const d = document.createElement('td'); d.textContent = text; return d; };
+    const tdDate = td(r.date || '—');
+    if(r.live){
+      const tag = document.createElement('span');
+      tag.textContent = ' 進行中';
+      tag.style.cssText = 'color:var(--teal);font-size:11px;';
+      tdDate.appendChild(tag);
+    }
+    tr.appendChild(tdDate);
+    tr.appendChild(td(r.name));
+    const tdPrice = td(r.price != null && r.price !== '' ? fmtMoney(r.price) : '—');
+    tdPrice.style.color = 'var(--gold)';
+    tr.appendChild(tdPrice);
+    // 買家可點：直接改查這個人買過的全部
+    const tdBuyer = document.createElement('td');
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'link-like'; b.textContent = r.buyer;
+    b.title = '改查這位買家買過的全部';
+    b.addEventListener('click', ()=>{
+      document.getElementById('soldSearch').value = r.buyer;
+      renderSoldSearch();
+    });
+    tdBuyer.appendChild(b); tr.appendChild(tdBuyer);
+    tbody.appendChild(tr);
+  });
+  table.style.display = '';
+}
+document.getElementById('soldSearch').addEventListener('input', renderSoldSearch);
+document.getElementById('soldClearBtn').addEventListener('click', ()=>{
+  document.getElementById('soldSearch').value = '';
+  renderSoldSearch();
+});
+
 function renderArchive(){
   const tbody = document.getElementById('archiveBody'); tbody.innerHTML = '';
   if(archive.length === 0){
