@@ -286,6 +286,10 @@
       <div id="promoList"></div>
       <button class="ghost" id="addPromoBtn" type="button" style="margin-top:4px;">＋ 新增優惠規則</button>
       <div id="promoPreview" class="muted-small" style="margin-top:6px;"></div>
+      <div id="offerRow" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);">
+        <label class="field check-row"><input type="checkbox" id="shopOfferOnInput"> 開放出價（商品頁選購列出現「出價」鈕）</label>
+        <div class="muted-small" style="margin-top:4px;">客人選好商品後可以對整車開價，填金額與留言後複製一則訊息私訊給你。商品卡片上不會有任何標示、不設下限，所有出價都由你判斷。關掉這個勾選並重新發布，前台那顆鈕就會消失。</div>
+      </div>
     </div>
       </div>
       <div class="set-pane" id="paneTrack" hidden>
@@ -3740,7 +3744,8 @@ async function buildPublishPayload(){
     name: String(r.name || ''), mode: r.mode, metric: r.metric,
     n: Number(r.n) || 0, kind: r.kind, value: Number(r.value) || 0
   }));
-  return { generatedAt: new Date().toISOString(), items, images, shipOptions, promoRules: rulesOut, promo, intro, trackUrl, socials, collectionSheet };
+  const offerOn = await loadShopOfferOn();      // null＝從沒設定過（手機端就是這樣）
+  return { generatedAt: new Date().toISOString(), items, images, shipOptions, promoRules: rulesOut, promo, intro, trackUrl, socials, collectionSheet, offerOn };
 }
 async function sha1HexBrowser(bytes){
   const buf = await crypto.subtle.digest('SHA-1', bytes);
@@ -3779,12 +3784,14 @@ async function publishViaGitHub(payload, hint){
   const shipOptions = (Array.isArray(payload.shipOptions) && payload.shipOptions.length)
     ? payload.shipOptions
     : (Array.isArray(existing.shipOptions) ? existing.shipOptions : []);
+  // 布林值的「空」是 null 不是 false——手機沒有這個勾選框，一律當成「沒意見，沿用線上」
+  const offerOn = (payload.offerOn == null) ? !!existing.offerOn : !!payload.offerOn;
   const promoRulesOut = (Array.isArray(payload.promoRules) && payload.promoRules.length)
     ? payload.promoRules
     : (Array.isArray(existing.promoRules) ? existing.promoRules : []);
   const catalogJson = JSON.stringify({
     generatedAt: payload.generatedAt, items: payload.items,
-    promo, intro, trackUrl, socials, shipOptions, promoRules: promoRulesOut
+    promo, intro, trackUrl, socials, shipOptions, promoRules: promoRulesOut, offerOn
   }, null, 2);
   return await CDGitHubPublish.publishShopToGitHub({
     token, owner: GH_OWNER, repo: GH_REPO, branch: GH_BRANCH,
@@ -3873,6 +3880,13 @@ async function loadShopPromo(){
   return (Array.isArray(a) && a[0]) ? String(a[0]) : '';
 }
 async function saveShopPromo(text){ await saveKey('shopPromo', [text || '']); }
+// 從沒設定過 → null。手機端沒有這個勾選框，發布時用 null 代表「沒意見，沿用線上」，
+// 若回 false，從手機發布一次就會把出價功能默默關掉。
+async function loadShopOfferOn(){
+  const a = await loadKey('shopOfferOn');
+  return (Array.isArray(a) && a.length) ? !!a[0] : null;
+}
+async function saveShopOfferOn(v){ await saveKey('shopOfferOn', [!!v]); }
 
 // 商品頁最上方介紹（歡迎詞/使用說明/社群帳號）— 同樣存為單元素陣列
 async function loadShopIntro(){
@@ -4339,6 +4353,12 @@ async function showNativeStorageInfo(){
     const promoRulesRow = document.getElementById('promoRulesRow');
     if(promoRulesRow){
       promoRulesRow.style.display = 'block';
+      const offerCb = document.getElementById('shopOfferOnInput');
+      if(offerCb && !offerCb._wired){
+        offerCb._wired = true;
+        offerCb.checked = (await loadShopOfferOn()) === true;
+        offerCb.addEventListener('change', ()=> saveShopOfferOn(offerCb.checked));
+      }
       promoRules = await loadPromoRules();
       renderPromoEditor(); renderPromoPreview();
       const addP = document.getElementById('addPromoBtn');
