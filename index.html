@@ -227,6 +227,23 @@
     </div>
   </div>
 </div>
+<div class="modal-overlay" id="exp711Overlay">
+  <div class="modal-box" style="max-width:760px;">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:4px;">
+      <h3 style="margin:0;font-size:17px;color:var(--gold);font-weight:600;">7-11 交貨便批次匯入</h3>
+      <span class="muted-small" id="exp711Meta"></span>
+    </div>
+    <div class="muted-small" style="margin-bottom:10px;">店號是即時從 7-11 門市地圖查的。<b>同名多家時不會自動填</b>，要你自己挑（點候選即可）。填好的店號會記在該筆訂單上，下次不用再查。</div>
+    <div id="exp711Body" style="max-height:52vh;overflow:auto;"></div>
+    <div class="modal-actions" style="margin-top:14px;justify-content:space-between;">
+      <span class="muted-small" id="exp711Hint"></span>
+      <span style="display:flex;gap:10px;">
+        <button class="ghost" id="exp711Close">取消</button>
+        <button class="primary" id="exp711Save" style="font-size:14px;padding:9px 20px;">匯出 xlsx</button>
+      </span>
+    </div>
+  </div>
+</div>
 <div class="wrap">
 
   <header>
@@ -637,6 +654,7 @@
         <h2>進行中訂單 <span class="count" id="orderCountLabel">(0)</span></h2>
         <div class="dl-row">
           <button class="secondary" id="pickAllBtn" title="一次列出所有尚未出貨訂單的商品，方便一趟揀完">📋 揀貨總覽</button>
+          <button class="secondary" id="exp711Btn" style="display:none;" title="把待出貨的 7-11 店到店訂單匯出成交貨便批次匯入表">📦 7-11 交貨便</button>
           <button class="primary" id="addOrderBtn">＋ 新增訂單</button>
         </div>
       </div>
@@ -3037,6 +3055,136 @@ function openPickAllModal(){
 }
 document.getElementById('pickAllBtn').addEventListener('click', openPickAllModal);
 
+// ---- 7-11 交貨便批次匯入表 ----
+// 寄件人固定是店主本人；收件人 mail 通常不會跟客人要，所以也填自己的。
+// 要改寄件人資料或包裹申報價值，改這裡就好。
+const EXP711_SENDER = { name: '吳念璞', phone: '0976408997', mail: 'doraemonpu391@gmail.com', value: 200 };
+
+const exp711OverlayEl = document.getElementById('exp711Overlay');
+function closeExp711(){ exp711OverlayEl.classList.remove('show'); }
+document.getElementById('exp711Close').addEventListener('click', closeExp711);
+exp711OverlayEl.addEventListener('click', (e)=>{ if(e.target === exp711OverlayEl) closeExp711(); });
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && exp711OverlayEl.classList.contains('show')) closeExp711(); });
+
+function exp711Orders(){
+  return orders.filter(o => o.shipping === '7-11店到店' && o.shipStatus !== '已出貨');
+}
+let _exp711Rows = [];
+
+function renderExp711(){
+  const body = document.getElementById('exp711Body'); body.innerHTML = '';
+  if(_exp711Rows.length === 0){
+    const p = document.createElement('div'); p.className = 'muted-small';
+    p.textContent = '目前沒有待出貨的 7-11 店到店訂單。';
+    body.appendChild(p);
+  }
+  _exp711Rows.forEach(r=>{
+    const line = document.createElement('div');
+    line.style.cssText = 'display:flex;align-items:flex-start;gap:9px;padding:9px 4px;border-bottom:1px solid #23252f;';
+    const cb = document.createElement('input'); cb.type = 'checkbox';
+    cb.checked = r.include; cb.disabled = !r.ready;
+    cb.style.cssText = 'margin-top:4px;flex-shrink:0;';
+    cb.addEventListener('change', ()=>{ r.include = cb.checked; updateExp711Hint(); });
+    const mid = document.createElement('div'); mid.style.cssText = 'flex:1;min-width:0;';
+    const top = document.createElement('div');
+    top.textContent = (r.name || '(缺收件人)') + '　' + (r.phone || '(缺電話)') + '　' + (r.store || '(缺門市)');
+    top.style.cssText = 'font-size:13.5px;line-height:1.5;' + (r.ready ? '' : 'color:var(--danger);');
+    mid.appendChild(top);
+    const sub = document.createElement('div');
+    sub.style.cssText = 'font-size:11.5px;color:var(--text-muted);margin-top:2px;';
+    sub.textContent = '買家 ' + (r.buyer || '—') + (r.problem ? '　⚠ 問題件' : '');
+    mid.appendChild(sub);
+    if(r.candidates && r.candidates.length){
+      const cand = document.createElement('div');
+      cand.style.cssText = 'margin-top:4px;display:flex;flex-wrap:wrap;gap:6px;';
+      r.candidates.forEach(c=>{
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'ghost'; b.style.cssText = 'padding:2px 8px;font-size:11.5px;';
+        b.textContent = c.id + '　' + c.name + '　' + c.address;
+        b.addEventListener('click', ()=>{ r.storeNo = c.id; persistStoreNo(r); renderExp711(); });
+        cand.appendChild(b);
+      });
+      mid.appendChild(cand);
+    }
+    const noWrap = document.createElement('div'); noWrap.style.cssText = 'flex-shrink:0;text-align:right;';
+    const input = document.createElement('input'); input.type = 'text'; input.className = 'cell-input';
+    input.value = r.storeNo || ''; input.placeholder = '店號';
+    input.style.cssText = 'width:96px;font-size:12.5px;font-family:"JetBrains Mono",monospace;';
+    input.addEventListener('change', ()=>{ r.storeNo = input.value.trim(); persistStoreNo(r); renderExp711(); });
+    noWrap.appendChild(input);
+    const st = document.createElement('div');
+    st.style.cssText = 'font-size:11px;margin-top:3px;';
+    const label = { inline: '名稱內含', ok: '✓ 查到', ambiguous: '⚠ 同名多家', none: '✗ 查不到', error: '✗ 查詢失敗', manual: '手動填' }[r.status] || '';
+    st.textContent = r.storeNo ? (r.status === 'ok' || r.status === 'inline' ? label : '已填') : label;
+    st.style.color = r.storeNo ? 'var(--teal)' : 'var(--danger)';
+    noWrap.appendChild(st);
+    line.appendChild(cb); line.appendChild(mid); line.appendChild(noWrap);
+    body.appendChild(line);
+  });
+  updateExp711Hint();
+}
+async function persistStoreNo(r){
+  const o = orders.find(x => x.id === r.orderId);
+  if(o){ o.pickupStoreNo = r.storeNo; await saveKey('orders', orders); }
+  r.status = r.storeNo ? 'manual' : r.status;
+  r.ready = exp711Ready(r);
+  if(!r.ready) r.include = false;
+}
+function exp711Ready(r){ return !!(r.name && r.phone && r.store && r.storeNo); }
+
+function updateExp711Hint(){
+  const n = _exp711Rows.filter(r => r.include && r.ready).length;
+  const bad = _exp711Rows.filter(r => !r.ready).length;
+  document.getElementById('exp711Hint').textContent =
+    '將匯出 ' + n + ' 筆' + (bad ? '　（' + bad + ' 筆資料不全，無法匯出）' : '');
+  document.getElementById('exp711Save').disabled = n === 0;
+}
+
+async function openExp711(){
+  const list = exp711Orders();
+  _exp711Rows = list.map(o => ({
+    orderId: o.id, buyer: o.buyer || '', name: o.recipient || '', phone: o.recipientPhone || '',
+    store: o.pickupStore || '', storeNo: o.pickupStoreNo || '',
+    problem: o.shipStatus === '問題件', status: o.pickupStoreNo ? 'manual' : '', candidates: [],
+    include: true, ready: false
+  }));
+  _exp711Rows.forEach(r => { r.ready = exp711Ready(r); r.include = r.ready; });
+  document.getElementById('exp711Meta').textContent = todayStr();
+  exp711OverlayEl.classList.add('show');
+  renderExp711();
+
+  // 只查「還沒有店號」的，一筆一筆來（別對人家的伺服器一次打十發）
+  const todo = _exp711Rows.filter(r => !r.storeNo && r.store);
+  for(let i = 0; i < todo.length; i++){
+    const r = todo[i];
+    document.getElementById('exp711Hint').textContent = '查詢門市店號… (' + (i+1) + '/' + todo.length + ')';
+    try{
+      const res = await window.cdshopNative.lookupStore711(r.store);
+      r.status = res.status;
+      r.candidates = res.candidates || [];
+      if(res.id){ r.storeNo = res.id; await persistStoreNo(r); }
+    }catch(e){ r.status = 'error'; }
+    r.ready = exp711Ready(r);
+    r.include = r.ready;
+    renderExp711();
+  }
+  renderExp711();
+}
+document.getElementById('exp711Save').addEventListener('click', async ()=>{
+  const rows = _exp711Rows.filter(r => r.include && r.ready).map(r => ({
+    senderName: EXP711_SENDER.name, senderPhone: EXP711_SENDER.phone, senderMail: EXP711_SENDER.mail,
+    value: EXP711_SENDER.value, store: r.store, storeNo: r.storeNo,
+    name: r.name, phone: r.phone, mail: EXP711_SENDER.mail
+  }));
+  if(rows.length === 0) return;
+  const hint = document.getElementById('exp711Hint');
+  hint.textContent = '產生檔案中…';
+  const res = await window.cdshopNative.saveExport711(rows, '交貨便匯入_' + todayStr() + '.xlsx');
+  if(res && res.ok){ hint.textContent = '已儲存：' + res.path; }
+  else if(res && res.canceled){ hint.textContent = '已取消'; }
+  else { hint.textContent = '匯出失敗：' + ((res && res.error) || '未知錯誤'); }
+});
+
 function renderOrders(){
   const tbody = document.getElementById('ordersBody'); tbody.innerHTML = '';
   if(orders.length === 0){
@@ -4298,6 +4446,9 @@ async function showNativeStorageInfo(){
     revealBtn.addEventListener('click', ()=> window.cdshopNative.reveal());
     const publishBtn = document.getElementById('publishShopBtn');
     if(publishBtn) publishBtn.style.display = 'inline-block';
+    // 交貨便匯出要寫檔＋查外部網站，只有桌面版做得到
+    const e711 = document.getElementById('exp711Btn');
+    if(e711){ e711.style.display = 'inline-block'; e711.addEventListener('click', openExp711); }
     // 商品頁最上方介紹：只有桌面後台能編輯；沒設過就預填範例讓你直接改
     const introRow = document.getElementById('introRow');
     const introInput = document.getElementById('shopIntroInput');
