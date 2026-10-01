@@ -436,8 +436,10 @@
         <div class="muted-small" style="margin-bottom:8px;">複製以下內容，貼到「上架清單」頁籤的匯入欄位，即可將這批商品一次加入上架清單。</div>
         <textarea id="formTextBox" class="caption-box mono-box" style="min-height:180px;" readonly></textarea>
         <div class="dl-row">
+          <button class="primary" id="importFormTextBtn" style="font-size:14px;padding:9px 18px;">直接匯入上架清單</button>
           <button class="secondary" id="copyFormTextBtn">複製表單格式</button>
           <span class="copy-hint" id="hintFormText">已複製 ✓</span>
+          <span class="copy-hint" id="hintFormImport" style="color:var(--gold);"></span>
         </div>
       </div>
     </div>
@@ -1659,7 +1661,7 @@ generateBtn.addEventListener('click', async ()=>{
   try{
     await generateComposite();
 
-    document.getElementById('formTextBox').value = await buildListingFormText();
+    setFormText(await buildListingFormText());
 
     document.getElementById('captionWithIntro').value = '正在為每張專輯搜尋簡介，請稍候...';
     document.getElementById('captionNoIntro').value = '整理中...';
@@ -1940,26 +1942,58 @@ async function migrateImportedImages(items){
     }
   }
 }
-document.getElementById('importBtn').addEventListener('click', async ()=>{
-  const text = document.getElementById('importBox').value.trim();
-  const hint = document.getElementById('hintImport');
-  if(!text){ hint.textContent = '請先貼上要匯入的內容'; hint.classList.add('show'); return; }
-  const parsed = parseListingFormText(text);
-  if(parsed.length === 0){
-    hint.textContent = '未能解析到任何商品資料，請確認格式是否正確';
-    hint.classList.add('show');
-    return;
-  }
+// 匯入表單格式文字 → 上架清單。上架清單頁的「匯入資料」與出貨看板的「直接匯入」
+// 共用這一支，兩邊的解析/圖片搬移/曲風遷移行為一定一致。
+// 回傳 { ok, count, withImg } 或 { ok:false, error }
+async function importListingsFromText(text){
+  const t = String(text || '').trim();
+  if(!t) return { ok: false, error: '請先貼上要匯入的內容' };
+  const parsed = parseListingFormText(t);
+  if(parsed.length === 0) return { ok: false, error: '未能解析到任何商品資料，請確認格式是否正確' };
   await migrateImportedImages(parsed);
   migrateTaxonomy(parsed);   // 舊咒語若帶中文大類，匯入當下就換成英文
   listings.push(...parsed);
   await saveKey('listings', listings);
+  renderListings();
+  return { ok: true, count: parsed.length, withImg: parsed.filter(p=>p.hasImage).length };
+}
+function importResultText(r){
+  return `成功匯入 ${r.count} 筆商品資料${r.withImg ? `（含 ${r.withImg} 張圖片）` : ''}`;
+}
+
+document.getElementById('importBtn').addEventListener('click', async ()=>{
+  const hint = document.getElementById('hintImport');
+  const r = await importListingsFromText(document.getElementById('importBox').value);
+  if(!r.ok){ hint.textContent = r.error; hint.classList.add('show'); return; }
   document.getElementById('importBox').value = '';
-  const withImg = parsed.filter(p=>p.hasImage).length;
-  hint.textContent = `成功匯入 ${parsed.length} 筆商品資料${withImg ? `（含 ${withImg} 張圖片）` : ''}`;
+  hint.textContent = importResultText(r);
   hint.classList.add('show');
   setTimeout(()=> hint.classList.remove('show'), 3500);
-  renderListings();
+});
+
+// 表單格式文字換了就是換了一批 → 解除「已匯入」的鎖定。
+// 由這一支統一負責寫入與解鎖，不要散在產生流程裡，否則哪天多一條產生路徑就會忘了解鎖。
+function setFormText(text){
+  document.getElementById('formTextBox').value = text;
+  const b = document.getElementById('importFormTextBtn');
+  if(b){ b.disabled = false; document.getElementById('hintFormImport').classList.remove('show'); }
+}
+
+// 出貨看板直接匯入：省掉「複製 → 切分頁 → 貼上 → 匯入」四步。
+// 同一份文字只能匯入一次：parseListingFormText 每次都發新的 id，按兩下就會變成兩筆
+// 一模一樣的商品，而且第二筆還沒有圖（圖片 token 第一次就被搬走了）。
+let _lastImportedFormText = '';
+document.getElementById('importFormTextBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('importFormTextBtn');
+  const hint = document.getElementById('hintFormImport');
+  const text = document.getElementById('formTextBox').value;
+  const show = (msg)=>{ hint.textContent = msg; hint.classList.add('show'); };
+  if(text.trim() && text === _lastImportedFormText){ show('這批已經匯入過了'); return; }
+  btn.disabled = true;
+  const r = await importListingsFromText(text);
+  if(!r.ok){ btn.disabled = false; show(r.error); return; }
+  _lastImportedFormText = text;
+  show(importResultText(r) + '　→ 可到「上架清單」查看');
 });
 
 // ---- Render / batch actions ----
