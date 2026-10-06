@@ -71,6 +71,18 @@
   button.primary:disabled{opacity:.45;cursor:not-allowed;}
   button.secondary{background:transparent;border:1px solid var(--teal);color:var(--teal);font-weight:700;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;white-space:nowrap;}
   button.secondary:hover{background:#4fd1c515;}
+  .wish-sub{margin:16px 0 6px;font-size:13px;color:var(--teal);font-weight:600;letter-spacing:.5px;}
+  .wish-view.active{border-color:var(--gold);color:var(--gold);}
+  .wish-card{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-bottom:10px;}
+  .wish-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 0 8px;border-bottom:1px solid #23252f;margin-bottom:2px;}
+  .wish-head .danger-ghost{margin-left:auto;}
+  .wish-row{display:flex;align-items:flex-start;gap:10px;padding:7px 2px;border-bottom:1px solid #1d1f27;}
+  .wish-row:last-child{border-bottom:none;}
+  .wish-row input[type=checkbox]{margin-top:3px;flex-shrink:0;}
+  .wish-row.have .wish-title{color:var(--teal);}
+  .wish-title{flex:1;min-width:0;font-size:14px;line-height:1.45;}
+  .wish-who{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;font-size:12px;max-width:55%;justify-content:flex-end;}
+  .wish-cnt{color:var(--gold);font-weight:600;}
   button.link-like{background:none;border:none;padding:0;color:var(--teal);cursor:pointer;font:inherit;text-align:left;}
   button.link-like:hover{text-decoration:underline;}
   button.ghost{background:transparent;border:1px solid var(--line);color:var(--text-muted);padding:6px 12px;border-radius:7px;cursor:pointer;font-size:12px;white-space:nowrap;}
@@ -359,6 +371,7 @@
     <button class="tab-btn" data-tab="listings">上架清單 <span class="badge" id="tabBadgeListings">0</span></button>
     <button class="tab-btn" data-tab="orders">進行中訂單 <span class="badge" id="tabBadgeOrders">0</span></button>
     <button class="tab-btn" data-tab="archive">封存與報表 <span class="badge" id="tabBadgeArchive">0</span></button>
+    <button class="tab-btn" data-tab="wishes">客人許願 <span class="badge" id="tabBadgeWishes">0</span></button>
     <button class="tab-btn" data-tab="analytics" id="tabBtnAnalytics" style="display:none;">數據分析</button>
   </nav>
 
@@ -743,6 +756,50 @@
           <tbody id="archiveBody"></tbody>
         </table>
       </div>
+    </div>
+  </section>
+
+  <!-- ===================== WISHES TAB ===================== -->
+  <section class="tab-panel" id="tab-wishes">
+    <div class="panel-card">
+      <h2>新增客人許願</h2>
+      <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));align-items:end;">
+        <div><label class="field">客人</label><select id="wishCustomerSel" class="status-select" style="width:100%;"></select></div>
+        <div class="wish-new"><label class="field">平台</label><input type="text" id="wishPlatform" list="wishPlatformList" placeholder="Threads / IG / FB 社團…"></div>
+        <div class="wish-new"><label class="field">名稱</label><input type="text" id="wishName" placeholder="客人的帳號或名字"></div>
+      </div>
+      <datalist id="wishPlatformList"></datalist>
+
+      <div class="wish-sub">單筆</div>
+      <div class="form-grid" style="grid-template-columns:1fr 1fr auto;align-items:end;">
+        <div><label class="field">藝人</label><input type="text" id="wishArtist" placeholder="例如 Coldplay"></div>
+        <div><label class="field">專輯（留空＝任何專輯）</label><input type="text" id="wishAlbum" placeholder="例如 Parachutes"></div>
+        <div><button class="primary" id="wishAddOneBtn" type="button">＋ 加入</button></div>
+      </div>
+
+      <div class="wish-sub">批量</div>
+      <div class="muted-small" style="margin-bottom:8px;">先按「複製 AI 整理咒語」貼給 Claude / ChatGPT，後面接著貼上客人給你的清單；它會更正藝人全名與專輯名稱、拆成一行一張、依藝人排序。把結果貼到下面即可。格式就是每行「藝人 - 專輯」，自己手打也行。</div>
+      <div class="dl-row" style="margin-top:0;">
+        <button class="secondary" id="wishCopyPromptBtn" type="button">複製 AI 整理咒語</button>
+        <span class="copy-hint" id="wishPromptHint">已複製！貼給 AI 後，在後面接上客人的清單</span>
+      </div>
+      <textarea id="wishBatchBox" class="mono-box" style="min-height:140px;" placeholder="Coldplay - Parachutes&#10;Coldplay - A Rush of Blood to the Head&#10;Radiohead - 任何"></textarea>
+      <div class="dl-row">
+        <button class="primary" id="wishImportBtn" type="button">匯入到這位客人</button>
+        <span class="copy-hint" id="wishHint" style="color:var(--gold);"></span>
+      </div>
+    </div>
+
+    <div class="panel-card">
+      <div class="row-between">
+        <h2>客人許願清單 <span class="count" id="wishCountLabel">(0)</span></h2>
+        <div style="display:flex;gap:6px;">
+          <button class="ghost wish-view active" type="button" data-view="customer">依客人</button>
+          <button class="ghost wish-view" type="button" data-view="album">依專輯</button>
+        </div>
+      </div>
+      <div class="toolbar"><input type="text" id="wishSearch" class="search-input" placeholder="搜尋客人、藝人或專輯…"></div>
+      <div id="wishList"></div>
     </div>
   </section>
 
@@ -3219,6 +3276,294 @@ document.getElementById('exp711Save').addEventListener('click', async ()=>{
   else { hint.textContent = '匯出失敗：' + ((res && res.error) || '未知錯誤'); }
 });
 
+// ===================== 客人許願 =====================
+// 資料：wishes = [{ id, platform, name, createdAt, items:[{ id, artist, album, have }] }]
+//
+// 畫面依客人分組（同一人的都在一起），但底下逐張存：「我有的打勾」是每張專輯各自
+// 的狀態，存成一格文字就沒辦法逐張勾，也做不出「哪張最多人在找」。
+//
+// 「有貨」是專輯層級的事實——你有 Parachutes，就是對所有想要它的人都有。所以勾選
+// 會同步到所有想要同一張的客人，之後新加進來的同一張也直接繼承。
+// album 為空字串＝「任何專輯」。
+let wishes = [];
+let _wishView = 'customer';
+
+const WISH_ANY = ['任何', '任意', '都可以', '全部', '任何專輯', 'any', 'all', '*'];
+function isAnyAlbum(s){ return WISH_ANY.indexOf(String(s || '').trim().toLowerCase()) !== -1; }
+
+// 比對用的鍵：大小寫、空白、標點都不算（Weezer - Blue Album 和 weezer-blue album 是同一張）
+function wishKey(artist, album){
+  const n = (s)=> String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+  return n(artist) + '|' + n(album);
+}
+// 唱片行的歸檔習慣：The Kooks 放在 K，不是 T
+function wishSortName(artist){ return String(artist || '').trim().replace(/^the\s+/i, ''); }
+function wishCompareArtist(a, b){
+  return wishSortName(a.artist).localeCompare(wishSortName(b.artist), 'zh-Hant', { sensitivity: 'base' });
+}
+// 客人自己的清單只依藝人排，同一位藝人的專輯維持匯入時的順序（sort 是穩定的）——
+// AI 咒語要求同藝人依發行年份排，若再按專輯字母重排就把那份工作蓋掉了。
+// 依專輯檢視裡的同一張來自不同客人，沒有共同的匯入順序，才用專輯名稱當第二鍵。
+function wishCompare(a, b){
+  return wishCompareArtist(a, b)
+      || String(a.album || '').localeCompare(String(b.album || ''), 'zh-Hant', { sensitivity: 'base' });
+}
+
+// 解析「藝人 - 專輯」清單。容忍 AI 常見的輸出習慣：編號、項目符號、程式碼框、
+// en/em dash、全形減號；一行寫好幾張（逗號、頓號分隔）就拆開。
+function parseWishLines(text){
+  const out = [];
+  String(text || '').split(/\r?\n/).forEach(raw=>{
+    let line = raw.trim();
+    if(!line || /^```/.test(line)) return;
+    line = line.replace(/^(?:[-*•・‧]\s+|\d+\s*[.)、．]\s*)/, '').trim();   // 項目符號／編號
+    if(!line) return;
+    // 只切「至少一側有空白」的第一個減號：客人手打的「Weezer -blue」要切得開，
+    // 但 Jay-Z、Wu-Tang Clan 這種名字裡的連字號不能切斷
+    const m = line.match(/^(.+?)(?:\s+[-–—－]\s*|\s*[-–—－]\s+)(.*)$/);
+    let artist, rest;
+    if(m){ artist = m[1].trim(); rest = m[2].trim(); }
+    else {
+      // 沒有「 - 」：「Radiohead 任何」這種，尾巴是「任何」就當成任何專輯，否則整行當藝人
+      const mm = line.match(/^(.+?)\s+(\S+)$/);
+      if(mm && isAnyAlbum(mm[2])){ artist = mm[1].trim(); rest = ''; }
+      else { artist = line; rest = ''; }
+    }
+    if(!artist) return;
+    const albums = rest ? rest.split(/\s*[,，、]\s*/).map(x=>x.trim()).filter(Boolean) : [''];
+    albums.forEach(al => out.push({ artist, album: isAnyAlbum(al) ? '' : al }));
+  });
+  return out;
+}
+
+function findWishCustomer(platform, name){
+  const p = String(platform || '').trim().toLowerCase(), n = String(name || '').trim().toLowerCase();
+  return wishes.find(c => String(c.platform || '').trim().toLowerCase() === p
+                       && String(c.name || '').trim().toLowerCase() === n);
+}
+// 同平台＋同名稱就是同一位客人，不重複建立
+function getOrCreateWishCustomer(platform, name){
+  const hit = findWishCustomer(platform, name);
+  if(hit) return hit;
+  const c = { id: genId(), platform: String(platform || '').trim(), name: String(name || '').trim(),
+              createdAt: new Date().toISOString(), items: [] };
+  wishes.unshift(c);
+  return c;
+}
+function wishHaveKeys(){
+  const set = new Set();
+  wishes.forEach(c => (c.items || []).forEach(it => { if(it.have) set.add(wishKey(it.artist, it.album)); }));
+  return set;
+}
+// 加進某位客人；同一位客人重複的同一張不重複加。回傳實際新增幾筆。
+function addWishItems(customer, items){
+  const have = wishHaveKeys();
+  const mine = new Set((customer.items || []).map(it => wishKey(it.artist, it.album)));
+  let added = 0;
+  items.forEach(x=>{
+    const k = wishKey(x.artist, x.album);
+    if(mine.has(k)) return;
+    mine.add(k);
+    customer.items.push({ id: genId(), artist: String(x.artist).trim(), album: String(x.album || '').trim(), have: have.has(k) });
+    added++;
+  });
+  customer.items.sort(wishCompareArtist);
+  return added;
+}
+// 勾「有貨」→ 所有想要同一張的客人一起變
+function setWishHave(key, value){
+  wishes.forEach(c => (c.items || []).forEach(it => { if(wishKey(it.artist, it.album) === key) it.have = !!value; }));
+}
+async function saveWishes(){ await saveKey('wishes', wishes); }
+
+function wishAlbumLabel(album){ return album ? album : '任何專輯'; }
+function wishCustomerLabel(c){ return (c.platform ? c.platform + ' · ' : '') + (c.name || '(未命名)'); }
+
+// ---- 新增區 ----
+function refreshWishCustomerSel(keepId){
+  const sel = document.getElementById('wishCustomerSel');
+  const cur = keepId !== undefined ? keepId : sel.value;
+  sel.innerHTML = '';
+  sel.appendChild(optionEl('', '＋ 新客人'));
+  wishes.forEach(c => sel.appendChild(optionEl(c.id, wishCustomerLabel(c))));
+  sel.value = wishes.some(c => c.id === cur) ? cur : '';
+  const isNew = sel.value === '';
+  document.querySelectorAll('.wish-new').forEach(el => { el.style.display = isNew ? '' : 'none'; });
+  // 平台建議：預設清單＋實際用過的
+  const dl = document.getElementById('wishPlatformList');
+  const plats = Array.from(new Set(PLATFORMS.concat(wishes.map(c => c.platform).filter(Boolean))));
+  dl.innerHTML = '';
+  plats.forEach(p => { const o = document.createElement('option'); o.value = p; dl.appendChild(o); });
+}
+// 決定要加到哪位客人：選了既有的就用；「新客人」就用平台＋名稱建立（同名則併入既有的）
+function resolveWishTarget(){
+  const sel = document.getElementById('wishCustomerSel');
+  if(sel.value) return wishes.find(c => c.id === sel.value) || null;
+  const name = document.getElementById('wishName').value.trim();
+  if(!name) return null;
+  return getOrCreateWishCustomer(document.getElementById('wishPlatform').value, name);
+}
+function wishFlash(msg){
+  const h = document.getElementById('wishHint');
+  h.textContent = msg; h.classList.add('show');
+  clearTimeout(h._t); h._t = setTimeout(()=> h.classList.remove('show'), 4000);
+}
+async function commitWishAdd(items){
+  if(!items.length){ wishFlash('沒有可以加入的專輯'); return false; }
+  const c = resolveWishTarget();
+  if(!c){ wishFlash('請先選擇客人，或填新客人的名稱'); return false; }
+  const added = addWishItems(c, items);
+  await saveWishes();
+  document.getElementById('wishName').value = '';
+  document.getElementById('wishPlatform').value = '';
+  refreshWishCustomerSel(c.id);         // 接下來的新增會繼續加到這位客人
+  renderWishes();
+  const dup = items.length - added;
+  wishFlash('已加入 ' + wishCustomerLabel(c) + '：' + added + ' 張' + (dup ? '（' + dup + ' 張已經在他的清單裡）' : ''));
+  return true;
+}
+
+const WISH_AI_PROMPT = [
+  '以下是客人想找的 CD 清單，可能有錯字、簡寫或口語。請幫我整理成可以匯入的格式：',
+  '',
+  '1. 每行一張專輯，格式固定為「藝人 - 專輯」（中間是半形空格、減號、空格）',
+  '2. 藝人寫正式全名，例如 RHCP → Red Hot Chili Peppers、okgo → OK Go',
+  '3. 專輯寫正式名稱與正確大小寫，例如 neon golden → Neon Golden',
+  '4. 一行寫了好幾張的請拆成多行，例如「Weezer - blue, green」拆成',
+  '   Weezer - Weezer (Blue Album)',
+  '   Weezer - Weezer (Green Album)',
+  '5. 只寫藝人、沒指定專輯的（例如「Radiohead 任何」）寫成「Radiohead - 任何」',
+  '6. 依藝人字母排序（忽略開頭的 The），同一位藝人依發行年份排序',
+  '7. 真的無法確定是哪張的，保留原文並在行尾加上「（？）」，不要自己猜一張',
+  '8. 只輸出清單本身：不要編號、不要項目符號、不要任何說明文字',
+  '',
+  '清單如下：',
+  ''
+].join('\n');
+
+// ---- 清單 ----
+function renderWishes(){
+  const box = document.getElementById('wishList'); box.innerHTML = '';
+  const q = document.getElementById('wishSearch').value.trim().toLowerCase();
+  const hit = (s)=> String(s || '').toLowerCase().indexOf(q) !== -1;
+  document.getElementById('wishCountLabel').textContent = '(' + wishes.length + ')';
+  document.getElementById('tabBadgeWishes').textContent = wishes.length;
+  document.querySelectorAll('.wish-view').forEach(b => b.classList.toggle('active', b.dataset.view === _wishView));
+
+  const empty = (msg)=>{ const p = document.createElement('div'); p.className = 'muted-small'; p.style.padding = '18px 4px'; p.textContent = msg; box.appendChild(p); };
+  if(wishes.length === 0){ empty('還沒有任何客人許願。'); return; }
+
+  const mkHave = (key, checked)=>{
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !!checked;
+    cb.title = '我有這張（會同步勾選所有想要同一張的客人）';
+    cb.addEventListener('change', async ()=>{ setWishHave(key, cb.checked); await saveWishes(); renderWishes(); });
+    return cb;
+  };
+
+  if(_wishView === 'album'){
+    // 依專輯：同一張集中在一起，看哪張最多人在找
+    const groups = new Map();
+    wishes.forEach(c => (c.items || []).forEach(it=>{
+      const k = wishKey(it.artist, it.album);
+      if(!groups.has(k)) groups.set(k, { key: k, artist: it.artist, album: it.album, have: false, who: [] });
+      const g = groups.get(k);
+      g.have = g.have || !!it.have;
+      g.who.push(c);
+    }));
+    let rows = Array.from(groups.values());
+    if(q) rows = rows.filter(g => hit(g.artist) || hit(g.album) || g.who.some(c => hit(c.name) || hit(c.platform)));
+    rows.sort(wishCompare);
+    if(!rows.length){ empty('沒有符合的專輯。'); return; }
+    rows.forEach(g=>{
+      const line = document.createElement('div'); line.className = 'wish-row' + (g.have ? ' have' : '');
+      line.appendChild(mkHave(g.key, g.have));
+      const t = document.createElement('div'); t.className = 'wish-title';
+      t.textContent = g.artist + ' - ' + wishAlbumLabel(g.album);
+      line.appendChild(t);
+      const who = document.createElement('div'); who.className = 'wish-who';
+      const cnt = document.createElement('span'); cnt.className = 'wish-cnt'; cnt.textContent = g.who.length + ' 位';
+      who.appendChild(cnt);
+      g.who.forEach(c=>{
+        const chip = document.createElement('button'); chip.type = 'button'; chip.className = 'link-like';
+        chip.textContent = wishCustomerLabel(c);
+        chip.title = '看這位客人的全部許願';
+        chip.addEventListener('click', ()=>{ _wishView = 'customer'; document.getElementById('wishSearch').value = c.name || ''; renderWishes(); });
+        who.appendChild(chip);
+      });
+      line.appendChild(who);
+      box.appendChild(line);
+    });
+    return;
+  }
+
+  // 依客人
+  let list = wishes;
+  if(q) list = list.filter(c => hit(c.name) || hit(c.platform) || (c.items || []).some(it => hit(it.artist) || hit(it.album)));
+  if(!list.length){ empty('沒有符合的客人。'); return; }
+  list.forEach(c=>{
+    const card = document.createElement('div'); card.className = 'wish-card';
+    const head = document.createElement('div'); head.className = 'wish-head';
+    const plat = makeTextInput(c.platform, async v=>{ c.platform = v.trim(); await saveWishes(); refreshWishCustomerSel(); });
+    plat.placeholder = '平台'; plat.style.maxWidth = '130px';
+    plat.setAttribute('list', 'wishPlatformList');
+    const name = makeTextInput(c.name, async v=>{ c.name = v.trim(); await saveWishes(); refreshWishCustomerSel(); });
+    name.placeholder = '名稱'; name.style.maxWidth = '200px';
+    const haveN = (c.items || []).filter(it => it.have).length;
+    const stat = document.createElement('span'); stat.className = 'muted-small';
+    stat.textContent = (c.items || []).length + ' 張' + (haveN ? '，其中 ' + haveN + ' 張有貨' : '');
+    if(haveN) stat.style.color = 'var(--teal)';
+    const del = document.createElement('button'); del.type = 'button'; del.className = 'danger-ghost'; del.textContent = '刪除客人';
+    del.addEventListener('click', async ()=>{
+      if(!(await uiConfirm('確定要刪除「' + wishCustomerLabel(c) + '」和他的 ' + (c.items || []).length + ' 張許願嗎？'))) return;
+      wishes = wishes.filter(x => x.id !== c.id);
+      await saveWishes(); refreshWishCustomerSel(); renderWishes();
+    });
+    head.appendChild(plat); head.appendChild(name); head.appendChild(stat); head.appendChild(del);
+    card.appendChild(head);
+    (c.items || []).forEach(it=>{
+      const line = document.createElement('div'); line.className = 'wish-row' + (it.have ? ' have' : '');
+      line.appendChild(mkHave(wishKey(it.artist, it.album), it.have));
+      const t = document.createElement('div'); t.className = 'wish-title';
+      t.textContent = it.artist + ' - ' + wishAlbumLabel(it.album);
+      line.appendChild(t);
+      const x = document.createElement('button'); x.type = 'button'; x.className = 'small-icon'; x.textContent = '✕';
+      x.title = '從這位客人的清單移除';
+      x.addEventListener('click', async ()=>{
+        c.items = c.items.filter(y => y.id !== it.id);
+        await saveWishes(); renderWishes();
+      });
+      line.appendChild(x);
+      card.appendChild(line);
+    });
+    if(!(c.items || []).length){
+      const p = document.createElement('div'); p.className = 'muted-small'; p.style.padding = '6px 4px';
+      p.textContent = '這位客人目前沒有許願。'; card.appendChild(p);
+    }
+    box.appendChild(card);
+  });
+}
+
+document.getElementById('wishCustomerSel').addEventListener('change', ()=> refreshWishCustomerSel());
+document.getElementById('wishAddOneBtn').addEventListener('click', async ()=>{
+  const artist = document.getElementById('wishArtist').value.trim();
+  const album = document.getElementById('wishAlbum').value.trim();
+  if(!artist){ wishFlash('請先填藝人'); return; }
+  if(await commitWishAdd([{ artist, album: isAnyAlbum(album) ? '' : album }])){
+    document.getElementById('wishArtist').value = '';
+    document.getElementById('wishAlbum').value = '';
+    document.getElementById('wishArtist').focus();
+  }
+});
+document.getElementById('wishImportBtn').addEventListener('click', async ()=>{
+  const items = parseWishLines(document.getElementById('wishBatchBox').value);
+  if(await commitWishAdd(items)) document.getElementById('wishBatchBox').value = '';
+});
+document.getElementById('wishCopyPromptBtn').addEventListener('click', async ()=>{
+  await copyText(WISH_AI_PROMPT, document.getElementById('wishPromptHint'));
+});
+document.getElementById('wishSearch').addEventListener('input', renderWishes);
+document.querySelectorAll('.wish-view').forEach(b => b.addEventListener('click', ()=>{ _wishView = b.dataset.view; renderWishes(); }));
+
 function renderOrders(){
   const tbody = document.getElementById('ordersBody'); tbody.innerHTML = '';
   if(orders.length === 0){
@@ -3654,7 +3999,7 @@ async function buildBackupObject(opts){
     _version: 2,
     exportedAt: new Date().toISOString(),
     textOnly: !withImages,
-    listings, orders, archive, images
+    listings, orders, archive, wishes, images
   };
 }
 
@@ -3682,12 +4027,17 @@ async function applyBackupObject(data, mode){
   const inOrders = Array.isArray(data.orders) ? data.orders : [];
   const inArchive = Array.isArray(data.archive) ? data.archive : [];
 
+  // 許願清單是後來才加的欄位：舊的備份／同步檔裡沒有它。沒有就保持本機原樣——
+  // 若當成空陣列，用舊備份「還原（覆蓋）」或讀到舊同步檔，就會把許願清單整個清掉。
+  const hasWishes = Array.isArray(data.wishes);
   if(mode === 'merge'){
     listings = mergeById(listings, inListings);
     orders = mergeById(orders, inOrders);
     archive = mergeById(archive, inArchive);
+    if(hasWishes) wishes = mergeById(wishes, data.wishes);
   } else {
     listings = inListings; orders = inOrders; archive = inArchive;
+    if(hasWishes) wishes = data.wishes;
     // overwrite 會先清空本機圖庫再從備份還原。**純文字備份（同步檔）不含圖片**，
     // 若照做就會把整個圖庫清光而且救不回來 → 沒有圖片的備份一律不清。
     const hasImages = data.images && typeof data.images === 'object' && Object.keys(data.images).length > 0;
@@ -3712,6 +4062,10 @@ async function applyBackupObject(data, mode){
   await saveKey('listings', listings);
   await saveKey('orders', orders);
   await saveKey('archive', archive);
+  if(hasWishes){
+    await saveKey('wishes', wishes);
+    if(document.getElementById('wishList')){ refreshWishCustomerSel(); renderWishes(); }
+  }
   renderTodoBanner();   // 匯入/同步進來的新資料，今日待辦立刻重算
   return { restoredImgs };
 }
@@ -4620,6 +4974,7 @@ async function init(){
   listings = await loadKey('listings');
   orders = await loadKey('orders');
   archive = await loadKey('archive');
+  wishes = await loadKey('wishes');
   // 三軸曲風分類：把舊的單一 genre 一次性遷移到 subgenres（冪等、非破壞）
   if(migrateTaxonomy(listings)) await saveKey('listings', listings);
   refreshTaxonomyDatalists();
@@ -4646,6 +5001,7 @@ async function init(){
   }catch(e){}
 
   renderListings(); renderOrders(); renderArchive();
+  refreshWishCustomerSel(); renderWishes();
   renderTodoBanner();
 }
 init().then(()=>{ window.__cdReady = true; });
