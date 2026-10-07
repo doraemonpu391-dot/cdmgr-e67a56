@@ -72,6 +72,8 @@
   button.secondary{background:transparent;border:1px solid var(--teal);color:var(--teal);font-weight:700;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;white-space:nowrap;}
   button.secondary:hover{background:#4fd1c515;}
   .batch-chip{align-items:center;gap:6px;font-size:11.5px;color:var(--teal);margin:4px 0 2px;}
+  .notes-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+  .notes-head label.field{margin-bottom:0;}
   .wish-sub{margin:16px 0 6px;font-size:13px;color:var(--teal);font-weight:600;letter-spacing:.5px;}
   .wish-view.active{border-color:var(--gold);color:var(--gold);}
   .wish-card{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-bottom:10px;}
@@ -1401,7 +1403,7 @@ function buildCards(){
         <div class="field-group"><label class="field">大類 Genre</label><input type="text" id="genre-${i}" list="genreOptions" placeholder="可多個，逗號分隔"></div>
         <div class="field-group"><label class="field">子曲風 Sub-genre</label><input type="text" id="subgenre-${i}" list="subOptions" placeholder="可多個，逗號分隔"></div>
       </div>
-      <div class="field-group"><label class="field">備注（選填）</label><textarea id="notes-${i}" style="min-height:44px;"></textarea></div>
+      <div class="field-group"><div class="notes-head"><label class="field">備注（選填）</label><button type="button" class="small-icon" id="edlookup-${i}" title="輸入編號（可加 IFPI、國別），查年份和發行國寫進備註">🔍 查版本</button></div><textarea id="notes-${i}" style="min-height:44px;"></textarea></div>
       <label class="check-row"><input type="checkbox" id="sidelabel-${i}"> 有側標</label>
       <div class="mini-checks">
         ${PLATFORMS.map(p=>`<label><input type="checkbox" class="cplat-${i}" value="${p}"> ${p}</label>`).join('')}
@@ -1431,6 +1433,7 @@ function buildCards(){
         refreshCardFilledState(i);
       });
     });
+    document.getElementById(`edlookup-${i}`).addEventListener('click', ()=> lookupEditionForSlot(i));
     fillSourceSelect(document.getElementById(`source-${i}`), composerState[i].source);
     wireSourceSelect(document.getElementById(`source-${i}`), (v)=>{ composerState[i].source = v; refreshCardFilledState(i); });
     document.getElementById(`sidelabel-${i}`).addEventListener('change', (e)=>{ composerState[i].sideLabel = e.target.checked; });
@@ -3655,6 +3658,41 @@ function uiPrompt(title, placeholder){
     setTimeout(()=> inp.focus(), 30);
   });
 }
+// 多欄位輸入對話框。fields: [{ key, label, placeholder, value, caps }]；取消回 null，確定回 { key: 值 }
+function uiForm(title, fields){
+  return new Promise(resolve=>{
+    const overlay = document.getElementById('modalOverlay');
+    const box = overlay.querySelector('.modal-box');
+    const actions = document.getElementById('modalActions');
+    document.getElementById('modalMsg').textContent = title;
+    actions.innerHTML = '';
+    const wrap = document.createElement('div'); wrap.style.cssText = 'margin-bottom:14px;text-align:left;';
+    const inputs = {};
+    const close = (val)=>{ overlay.classList.remove('show'); wrap.remove(); resolve(val); };
+    const done = ()=> close(Object.fromEntries(Object.keys(inputs).map(k => [k, inputs[k].value.trim()])));
+    fields.forEach(fd=>{
+      const g = document.createElement('div'); g.className = 'field-group';
+      const l = document.createElement('label'); l.className = 'field'; l.textContent = fd.label;
+      const inp = document.createElement('input');
+      inp.type = 'text'; inp.placeholder = fd.placeholder || ''; inp.value = fd.value || '';
+      inp.autocomplete = 'off'; inp.style.width = '100%';
+      if(fd.caps) inp.setAttribute('autocapitalize', 'characters');
+      inp.addEventListener('keydown', (e)=>{ if(e.key === 'Enter' && !e.isComposing) done(); });
+      g.appendChild(l); g.appendChild(inp); wrap.appendChild(g);
+      inputs[fd.key] = inp;
+    });
+    box.insertBefore(wrap, actions);
+    const cancelBtn = document.createElement('button'); cancelBtn.className = 'ghost'; cancelBtn.textContent = '取消';
+    const okBtn = document.createElement('button'); okBtn.className = 'primary';
+    okBtn.style.cssText = 'font-size:14px;padding:9px 20px;'; okBtn.textContent = '確定';
+    cancelBtn.addEventListener('click', ()=>close(null));
+    okBtn.addEventListener('click', done);
+    actions.appendChild(cancelBtn); actions.appendChild(okBtn);
+    overlay.classList.add('show');
+    const first = fields.find(fd => !fd.value) || fields[0];
+    setTimeout(()=> inputs[first.key].focus(), 30);
+  });
+}
 // 從清單選一個。options: [{ value, label }]；取消回 null
 function uiPickFrom(message, options){
   return new Promise(resolve=>{
@@ -3734,25 +3772,44 @@ function groupEditions(rows){
   });
   return Array.from(m.values()).sort((x, y)=> y.count - x.count || (x.year ? 0 : 1) - (y.year ? 0 : 1) || String(x.year).localeCompare(String(y.year)));
 }
-// 回傳 { status:'ok', year, country, src } ｜ { status:'ambiguous', options:[{year,country,count}], src } ｜ null
-async function lookupCatNo(catNo, fetchImpl, artist, album){
+// IFPI 碼（CD 內圈的 IFPI L553、IFPI 94I0）：同一個編號的不同壓片廠／年份，IFPI 通常不同，
+// 是分辨歐美版最準的線索。Discogs 搜尋結果的 barcode 欄位裡就附了每個版本的 IFPI，
+// 不用一個個點進去查。比對不管空白大小寫；O/0、I/1 很容易看錯，一律當成一樣。
+function ifpiFold(s){ return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/O/g, '0').replace(/I/g, '1'); }
+function ifpiCodes(s){ return String(s || '').split(/[,，、;；\/／]+/).map(x => ifpiFold(x).replace(/^1FP1/, '')).filter(Boolean); }
+function hasIfpi(ids, code){ return (ids || []).some(v => { const f = ifpiFold(v); return f === code || f.indexOf('1FP1' + code) !== -1; }); }
+// 國別：日／日本／日版／Japan／JP 都認得
+function countryMatches(c, wantRaw){
+  const w = String(wantRaw || '').trim().replace(/版$/, '');
+  if(!w) return true;
+  if(String(c || '').toLowerCase() === w.toLowerCase() || MB_COUNTRY[w.toUpperCase()] === c) return true;
+  const zh = COUNTRY_ZH[c];
+  return !!(zh && w.indexOf(zh) !== -1);
+}
+// 回傳 { status:'ok', year, country, src } ｜ { status:'ambiguous', options:[{year,country,count}], src, unmatched? } ｜ null
+// filters：{ ifpi, country }（選填）。有填就再縮小；縮到一個都不剩＝條件對不上，
+// 回傳全部版本並標 unmatched 讓人自己看——不可以默默忽略條件，也不可以亂挑。
+async function lookupCatNo(catNo, fetchImpl, artist, album, filters){
   const want = normCat(catNo);
   if(!want) return null;
   const f = fetchImpl || ((u)=> fetch(u));
+  const codes = ifpiCodes(filters && filters.ifpi), ctry = (filters && filters.country) || '';
   const decide = (rows, src)=>{
     if(!rows.length) return null;
-    const eds = groupEditions(rows);
+    const hit = rows.filter(r => countryMatches(r.country, ctry) && codes.every(c => hasIfpi(r.ids, c)));
+    if(!hit.length) return { status: 'ambiguous', options: groupEditions(rows), src, unmatched: true };
+    const eds = groupEditions(hit);
     if(eds.length === 1) return { status: 'ok', year: eds[0].year, country: eds[0].country, src };
     return { status: 'ambiguous', options: eds, src };
   };
   try{
-    const r = await f('https://api.discogs.com/database/search?type=release&catno=' + encodeURIComponent(catNo));
+    const r = await f('https://api.discogs.com/database/search?type=release&per_page=100&catno=' + encodeURIComponent(catNo));
     if(r && r.ok){
       const d = await r.json();
       const rows = (d.results || []).filter(x => normCat(x.catno) === want).filter(x=>{
         const t = String(x.title || ''), i = t.indexOf(' - ');
         return titleMatches(i >= 0 ? t.slice(0, i) : t, i >= 0 ? t.slice(i + 3) : '', artist, album);
-      }).map(x => ({ year: x.year ? String(x.year) : '', country: x.country || '' }));
+      }).map(x => ({ year: x.year ? String(x.year) : '', country: x.country || '', ids: x.barcode || [] }));
       const res = decide(rows, 'discogs');
       if(res) return res;
     }
@@ -3784,6 +3841,58 @@ function editionNote(catNo, info, artist){
   return s;
 }
 function editionOptionLabel(o){ return ((o.year || '年份不明') + ' ' + countryLabel(o.country)).trim() + '（' + o.count + ' 筆）'; }
+// 寫進備註：同一個編號之前寫過的（只有編號、或整段版本說明）換掉，其他備註原樣留在後面
+function putEditionInNotes(notes, catNo, note){
+  const want = normCat(catNo);
+  const parts = String(notes || '').split('，');
+  const keep = [];
+  for(let k = 0; k < parts.length; k++){
+    const p = parts[k].trim();
+    if(!p) continue;
+    const paren = p.lastIndexOf('(');
+    if(normCat(p) === want || (paren !== -1 && normCat(p.slice(paren + 1)) === want)){
+      if((parts[k + 1] || '').trim() === '含英、日文歌詞解說') k++;
+      continue;
+    }
+    keep.push(parts[k]);
+  }
+  return [note].concat(keep).join('，');
+}
+// 出貨看板每一格的「🔍 查版本」：自己輸入編號（IFPI、國別選填）→ 查年份和發行國 → 寫進備註
+async function lookupEditionForSlot(i){
+  const s = composerState[i];
+  const [bid, iid] = String(s.batchRef || '').split('/');
+  const b = bid && batches.find(x => x.id === bid);
+  const it = b && (b.items || []).find(x => x.id === iid);
+  const v = await uiForm('查版本：填編號；同一個編號有好幾版時，IFPI 或國別能幫你分出是哪一版', [
+    { key: 'catNo', label: '編號', placeholder: '例如 ESCA-0627', value: (it && it.catNo) || '', caps: true },
+    { key: 'ifpi', label: 'IFPI（選填，CD 內圈的小字）', placeholder: '例如 L553，兩個用逗號隔開', caps: true },
+    { key: 'country', label: '國別（選填）', placeholder: '例如 日、英、美' } ]);
+  if(!v) return;
+  if(!v.catNo){ await uiAlert('請填編號。'); return; }
+  v.catNo = v.catNo.toUpperCase();     // 備註裡的編號一律大寫，手機打小寫也一樣
+  const btn = document.getElementById(`edlookup-${i}`);
+  btn.disabled = true; btn.textContent = '查詢中…';
+  let info;
+  try{ info = await lookupCatNo(v.catNo, null, s.artist, s.album, { ifpi: v.ifpi, country: v.country }); }
+  finally{ btn.disabled = false; btn.textContent = '🔍 查版本'; }
+  if(!info){
+    await uiAlert('查不到 ' + v.catNo + '（Discogs 和 MusicBrainz 都沒有，或藝人／專輯對不上）。備註沒有更動。');
+    return;
+  }
+  if(info.status === 'ambiguous'){
+    const opts = info.options.map((o, n) => ({ value: String(n), label: editionOptionLabel(o) }));
+    opts.push({ value: 'none', label: '都不是／只寫編號，我自己補' });
+    const msg = info.unmatched
+      ? '依你填的' + [v.ifpi && ' IFPI', v.country && ' 國別'].filter(Boolean).join('、') + ' 對不到任何版本（可能看錯，或資料庫沒記）。以下是 ' + v.catNo + ' 查到的全部版本，你手上的是？'
+      : v.catNo + ' 有好幾個版本，你手上的是？' + (v.ifpi ? '' : '（填 IFPI 通常能直接分出來）');
+    const pick = await uiPickFrom(msg, opts);
+    if(pick === null) return;
+    info = pick === 'none' ? null : info.options[Number(pick)];
+  }
+  s.notes = putEditionInNotes(s.notes, v.catNo, editionNote(v.catNo, info, s.artist));
+  document.getElementById(`notes-${i}`).value = s.notes;
+}
 
 // ===================== 進貨批次 =====================
 // batches = [{ id, date, source, mode:'avg'|'each', paid, fees, note, createdAt,
