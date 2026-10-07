@@ -71,6 +71,7 @@
   button.primary:disabled{opacity:.45;cursor:not-allowed;}
   button.secondary{background:transparent;border:1px solid var(--teal);color:var(--teal);font-weight:700;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;white-space:nowrap;}
   button.secondary:hover{background:#4fd1c515;}
+  .batch-chip{align-items:center;gap:6px;font-size:11.5px;color:var(--teal);margin:4px 0 2px;}
   .wish-sub{margin:16px 0 6px;font-size:13px;color:var(--teal);font-weight:600;letter-spacing:.5px;}
   .wish-view.active{border-color:var(--gold);color:var(--gold);}
   .wish-card{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-bottom:10px;}
@@ -367,6 +368,7 @@
   <div id="todoBanner" style="display:none;background:#4fd1c512;border:1px solid #4fd1c545;border-radius:9px;padding:12px 14px;margin-bottom:18px;font-size:13px;line-height:1.8;"></div>
 
   <nav class="tabs">
+    <button class="tab-btn" data-tab="intake">進貨 <span class="badge" id="tabBadgeIntake">0</span></button>
     <button class="tab-btn active" data-tab="composer">出貨看板</button>
     <button class="tab-btn" data-tab="listings">上架清單 <span class="badge" id="tabBadgeListings">0</span></button>
     <button class="tab-btn" data-tab="orders">進行中訂單 <span class="badge" id="tabBadgeOrders">0</span></button>
@@ -375,8 +377,59 @@
     <button class="tab-btn" data-tab="analytics" id="tabBtnAnalytics" style="display:none;">數據分析</button>
   </nav>
 
+  <!-- ===================== INTAKE (進貨) TAB ===================== -->
+  <section class="tab-panel" id="tab-intake">
+    <div class="panel-card">
+      <h2>登記進貨</h2>
+      <div class="muted-small" style="margin-bottom:10px;">收到貨當下就登記：哪天、跟誰收、付多少、這批有哪些片。之後上架時到「出貨看板」按「從進貨批次帶入」，藝人、專輯、成本、貨源都會自動填好。</div>
+      <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));align-items:end;">
+        <div><label class="field">批次</label><select id="batchSel" class="status-select" style="width:100%;"></select></div>
+        <div class="batch-new"><label class="field">進貨日期</label><input type="date" id="batchDate"></div>
+        <div class="batch-new"><label class="field">貨源</label><select id="batchSource" class="status-select" style="width:100%;"></select></div>
+        <div class="batch-new"><label class="field">成本分攤</label><select id="batchMode" class="status-select" style="width:100%;"><option value="avg">整批平均</option><option value="each">逐張填寫</option></select></div>
+        <div class="batch-new batch-paid"><label class="field">付款總額</label><input type="number" id="batchPaid" min="0" placeholder="0"></div>
+        <div class="batch-new"><label class="field">其他費用（運費、手續費）</label><input type="number" id="batchFees" min="0" placeholder="0"></div>
+        <div class="batch-new"><label class="field">批次備註</label><input type="text" id="batchNote" placeholder="選填"></div>
+      </div>
+
+      <div class="wish-sub">單筆</div>
+      <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));align-items:end;">
+        <div><label class="field">藝人</label><input type="text" id="bdArtist"></div>
+        <div><label class="field">專輯</label><input type="text" id="bdAlbum"></div>
+        <div><label class="field">編號</label><input type="text" id="bdCatNo" placeholder="例如 ESCA-0627"></div>
+        <div class="bd-price"><label class="field">這張價格</label><input type="number" id="bdPrice" min="0"></div>
+        <div><label class="field">備註</label><input type="text" id="bdNote" placeholder="選填"></div>
+        <div><button class="primary" id="bdAddBtn" type="button" style="width:100%;">＋ 加入</button></div>
+      </div>
+
+      <div class="wish-sub">批量</div>
+      <div class="muted-small" style="margin-bottom:8px;">每行一張「藝人 - 專輯」，要記編號就寫「藝人 - 專輯 | 編號」。可以拍一張那疊 CD 的照片，按「複製 AI 咒語」連同照片丟給 Claude／ChatGPT，把它列出來的清單貼回來。</div>
+      <div class="dl-row" style="margin-top:0;">
+        <button class="secondary" id="batchCopyPromptBtn" type="button">複製 AI 咒語（照片列清單）</button>
+        <span class="copy-hint" id="batchPromptHint">已複製！貼給 AI 並附上照片</span>
+      </div>
+      <textarea id="batchPasteBox" class="mono-box" style="min-height:120px;" placeholder="Coldplay - Parachutes | 7243 5 27783 2 5&#10;Radiohead - OK Computer | TOCP-50201"></textarea>
+      <div class="dl-row">
+        <button class="primary" id="batchPasteBtn" type="button">加入這批</button>
+        <span class="copy-hint" id="batchHint" style="color:var(--gold);"></span>
+      </div>
+    </div>
+
+    <div class="panel-card">
+      <div class="row-between">
+        <h2>進貨批次 <span class="count" id="batchCountLabel">(0)</span></h2>
+      </div>
+      <div class="toolbar"><input type="text" id="batchSearch" class="search-input" placeholder="搜尋貨源、藝人、專輯或編號…"></div>
+      <div id="batchList"></div>
+    </div>
+  </section>
+
   <!-- ===================== COMPOSER TAB ===================== -->
   <section class="tab-panel active" id="tab-composer">
+    <div class="dl-row" style="margin:0 0 12px;">
+      <button class="secondary" id="pullBatchBtn" type="button">📦 從進貨批次帶入</button>
+      <span class="muted-small">把待上架的片填進空格子：藝人、專輯、成本、貨源自動帶好，有編號的會上網查版本寫進備註</span>
+    </div>
     <div class="composer-grid" id="cardGrid"></div>
 
     <div class="actions-bar">
@@ -467,7 +520,7 @@
         <div><label class="field">專輯名稱</label><input type="text" id="lstAlbum" placeholder="例如：范特西"></div>
         <div><label class="field">標價（NT$）</label><input type="number" id="lstPrice" min="0"></div>
         <div><label class="field">成本（NT$）</label><input type="number" id="lstCost" min="0"></div>
-        <div><label class="field">貨源</label><input type="text" id="lstSource" placeholder="例如：光華商場"></div>
+        <div><label class="field">貨源</label><select id="lstSource" class="status-select" style="width:100%;"></select></div>
         <datalist id="regionOptions"></datalist>
         <datalist id="genreOptions"></datalist>
         <datalist id="subOptions"></datalist>
@@ -567,7 +620,7 @@
           <div><label class="field">專輯名稱</label><input type="text" id="edtAlbum"></div>
           <div><label class="field">標價（NT$）</label><input type="number" id="edtPrice" min="0"></div>
           <div><label class="field">成本（NT$）</label><input type="number" id="edtCost" min="0"></div>
-          <div><label class="field">貨源</label><input type="text" id="edtSource"></div>
+          <div><label class="field">貨源</label><select id="edtSource" class="status-select" style="width:100%;"></select></div>
           <div><label class="field">地區/語言</label><input type="text" id="edtRegion" list="regionOptions" placeholder="可多個，逗號分隔"></div>
           <div><label class="field">大類 Genre</label><input type="text" id="edtGenre" list="genreOptions" placeholder="可多個，逗號分隔"></div>
           <div><label class="field">子曲風 Sub-genre</label><input type="text" id="edtSub" list="subOptions" placeholder="可多個，逗號分隔"></div>
@@ -1017,12 +1070,16 @@ function listingTaxonomyText(l){
 
 const composerState = Array.from({length: SLOTS}, () => ({
   imgSrc:null, artist:'', album:'', price:'', notes:'', region:'', genre:'', subgenre:'', cost:'', source:'',
-  sideLabel:false, platforms:[], biddingType:'', auctionEnd:''
+  sideLabel:false, platforms:[], biddingType:'', auctionEnd:'', batchRef:''
 }));
 
 let listings = [];
 let orders = [];
 let archive = [];
+// 許願與進貨批次也放這裡：出貨看板在載入時就會建卡片、填貨源下拉，那時會讀到 batches，
+// 宣告在後面的話會撞上 let 的暫時性死區（Cannot access 'batches' before initialization）。
+let wishes = [];
+let batches = [];
 let lastReportList = [];
 let lastReportRange = {start:'', end:''};
 let selectedListingIds = new Set();
@@ -1336,7 +1393,8 @@ function buildCards(){
         <div class="field-group"><label class="field">成本（NT$）</label><input type="number" id="cost-${i}" min="0"></div>
       </div>
       <div class="two-col">
-        <div class="field-group"><label class="field">貨源</label><input type="text" id="source-${i}" placeholder="例如：光華商場"></div>
+        <div class="field-group"><label class="field">貨源</label><select id="source-${i}" class="status-select" style="width:100%;"></select></div>
+        <div class="batch-chip" id="batchchip-${i}" style="display:none;"></div>
         <div class="field-group"><label class="field">地區/語言</label><input type="text" id="region-${i}" list="regionOptions" placeholder="可多個，逗號分隔"></div>
       </div>
       <div class="two-col">
@@ -1365,12 +1423,16 @@ function buildCards(){
       composerState[i].imgSrc = dataUrl; renderDrop(i); updateSlotProgress();
     });
 
-    ['artist','album','price','cost','source','region','genre','subgenre','notes'].forEach(field=>{
+    ['artist','album','price','cost','region','genre','subgenre','notes'].forEach(field=>{
       document.getElementById(`${field}-${i}`).addEventListener('input',(e)=>{
         composerState[i][field] = e.target.value;
+        // 藝人清空＝這格不再是那片了，斷開進貨連結（免得匯入時誤標成已上架）
+        if(field === 'artist' && !e.target.value.trim() && composerState[i].batchRef){ composerState[i].batchRef = ''; renderBatchChip(i); }
         refreshCardFilledState(i);
       });
     });
+    fillSourceSelect(document.getElementById(`source-${i}`), composerState[i].source);
+    wireSourceSelect(document.getElementById(`source-${i}`), (v)=>{ composerState[i].source = v; refreshCardFilledState(i); });
     document.getElementById(`sidelabel-${i}`).addEventListener('change', (e)=>{ composerState[i].sideLabel = e.target.checked; });
     document.querySelectorAll(`.cplat-${i}`).forEach(cb=>{
       cb.addEventListener('change', ()=>{
@@ -1424,9 +1486,11 @@ function updateSlotProgress(){
 function hydrateComposerUI(){
   for(let i=0;i<SLOTS;i++){
     const s = composerState[i];
-    ['artist','album','price','cost','source','genre','notes'].forEach(f=>{
+    ['artist','album','price','cost','region','genre','subgenre','notes'].forEach(f=>{
       const el = document.getElementById(`${f}-${i}`); if(el) el.value = s[f] || '';
     });
+    const srcSel = document.getElementById(`source-${i}`); if(srcSel) fillSourceSelect(srcSel, s.source);
+    renderBatchChip(i);
     const sl = document.getElementById(`sidelabel-${i}`); if(sl) sl.checked = !!s.sideLabel;
     document.querySelectorAll(`.cplat-${i}`).forEach(cb=>{ cb.checked = (s.platforms||[]).includes(cb.value); });
     document.querySelectorAll(`input[name="cbid-${i}"]`).forEach(r=>{ r.checked = (r.value === s.biddingType); });
@@ -1704,7 +1768,8 @@ async function buildListingFormText(){
       `類型: ${s.biddingType||''}`,
       `截標時間: ${s.auctionEnd||''}`,
       `平台: ${(s.platforms||[]).join(', ')}`,
-      `圖片鍵: ${imgToken}`
+      `圖片鍵: ${imgToken}`,
+      `進貨: ${s.batchRef || ''}`
     ];
     blocks.push(lines.join('\n'));
   }
@@ -1980,7 +2045,7 @@ function parseListingFormText(text){
       auctionEnd: obj['截標時間']||'',
       platforms: obj['平台'] ? obj['平台'].split(',').map(p=>p.trim()).filter(Boolean) : [],
       status:'在售', dateAdded: todayStr(),
-      hasImage: false, _imgToken: obj['圖片鍵'] || ''
+      hasImage: false, _imgToken: obj['圖片鍵'] || '', _batchRef: obj['進貨'] || ''
     });
   });
   return results;
@@ -2010,7 +2075,10 @@ async function importListingsFromText(text){
   await migrateImportedImages(parsed);
   migrateTaxonomy(parsed);   // 舊咒語若帶中文大類，匯入當下就換成英文
   listings.push(...parsed);
+  const batchLinked = linkImportedToBatches(parsed);
   await saveKey('listings', listings);
+  if(batchLinked){ await saveBatches(); renderBatches(); }
+  composerState.forEach((st, i)=>{ if(st.batchRef){ st.batchRef = ''; renderBatchChip(i); } });   // 這批已經匯入，連結用完了
   renderListings();
   return { ok: true, count: parsed.length, withImg: parsed.filter(p=>p.hasImage).length };
 }
@@ -2515,7 +2583,7 @@ document.getElementById('batchEditBtn').addEventListener('click', async ()=>{
       document.getElementById('edtAlbum').value = it.album || '';
       document.getElementById('edtPrice').value = it.price || '';
       document.getElementById('edtCost').value = it.cost || '';
-      document.getElementById('edtSource').value = it.source || '';
+      fillSourceSelect(document.getElementById('edtSource'), it.source || '', '（不改）');
       document.getElementById('edtRegion').value = tagsToStr(it.regions);
       document.getElementById('edtGenre').value = tagsToStr(it.genres);
       document.getElementById('edtSub').value = tagsToStr(it.subgenres);
@@ -2593,7 +2661,7 @@ document.getElementById('loadToComposerBtn').addEventListener('click', async ()=
 
   // Reset composer state
   for(let i=0;i<SLOTS;i++){
-    composerState[i] = { imgSrc:null, artist:'', album:'', price:'', notes:'', region:'', genre:'', subgenre:'', cost:'', source:'', sideLabel:false, platforms:[], biddingType:'', auctionEnd:'' };
+    composerState[i] = { imgSrc:null, artist:'', album:'', price:'', notes:'', region:'', genre:'', subgenre:'', cost:'', source:'', sideLabel:false, platforms:[], biddingType:'', auctionEnd:'', batchRef:'' };
   }
   // Fill from selected listings + load images
   for(let i=0;i<selected.length;i++){
@@ -2604,7 +2672,7 @@ document.getElementById('loadToComposerBtn').addEventListener('click', async ()=
       region: tagsToStr(l.regions), genre: tagsToStr(l.genres), subgenre: tagsToStr(l.subgenres),
       cost: l.cost||'', source: l.source||'',
       sideLabel: !!l.sideLabel, platforms: (l.platforms||[]).slice(),
-      biddingType: l.biddingType||'', auctionEnd: l.auctionEnd||''
+      biddingType: l.biddingType||'', auctionEnd: l.auctionEnd||'', batchRef: ''
     };
     const img = await imgGet(l.id);
     if(img) composerState[i].imgSrc = img;
@@ -3285,7 +3353,6 @@ document.getElementById('exp711Save').addEventListener('click', async ()=>{
 // 「有貨」是專輯層級的事實——你有 Parachutes，就是對所有想要它的人都有。所以勾選
 // 會同步到所有想要同一張的客人，之後新加進來的同一張也直接繼承。
 // album 為空字串＝「任何專輯」。
-let wishes = [];
 let _wishView = 'customer';
 
 const WISH_ANY = ['任何', '任意', '都可以', '全部', '任何專輯', 'any', 'all', '*'];
@@ -3563,6 +3630,573 @@ document.getElementById('wishCopyPromptBtn').addEventListener('click', async ()=
 });
 document.getElementById('wishSearch').addEventListener('input', renderWishes);
 document.querySelectorAll('.wish-view').forEach(b => b.addEventListener('click', ()=>{ _wishView = b.dataset.view; renderWishes(); }));
+
+// 文字輸入對話框。Electron 不支援 window.prompt()（會直接回 null），只能自己做。
+function uiPrompt(title, placeholder){
+  return new Promise(resolve=>{
+    const overlay = document.getElementById('modalOverlay');
+    const box = overlay.querySelector('.modal-box');
+    const actions = document.getElementById('modalActions');
+    document.getElementById('modalMsg').textContent = title;
+    actions.innerHTML = '';
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.placeholder = placeholder || '';
+    inp.style.cssText = 'width:100%;margin-bottom:18px;';
+    box.insertBefore(inp, actions);
+    const cancelBtn = document.createElement('button'); cancelBtn.className = 'ghost'; cancelBtn.textContent = '取消';
+    const okBtn = document.createElement('button'); okBtn.className = 'primary';
+    okBtn.style.cssText = 'font-size:14px;padding:9px 20px;'; okBtn.textContent = '確定';
+    const close = (val)=>{ overlay.classList.remove('show'); inp.remove(); resolve(val); };
+    cancelBtn.addEventListener('click', ()=>close(null));
+    okBtn.addEventListener('click', ()=>close(inp.value.trim()));
+    inp.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') close(inp.value.trim()); });
+    actions.appendChild(cancelBtn); actions.appendChild(okBtn);
+    overlay.classList.add('show');
+    setTimeout(()=> inp.focus(), 30);
+  });
+}
+// 從清單選一個。options: [{ value, label }]；取消回 null
+function uiPickFrom(message, options){
+  return new Promise(resolve=>{
+    const overlay = document.getElementById('modalOverlay');
+    const box = overlay.querySelector('.modal-box');
+    const actions = document.getElementById('modalActions');
+    document.getElementById('modalMsg').textContent = message;
+    actions.innerHTML = '';
+    const sel = document.createElement('select');
+    sel.className = 'status-select'; sel.style.cssText = 'width:100%;margin-bottom:18px;';
+    options.forEach(o => sel.appendChild(optionEl(o.value, o.label)));
+    box.insertBefore(sel, actions);
+    const cancelBtn = document.createElement('button'); cancelBtn.className = 'ghost'; cancelBtn.textContent = '取消';
+    const okBtn = document.createElement('button'); okBtn.className = 'primary';
+    okBtn.style.cssText = 'font-size:14px;padding:9px 20px;'; okBtn.textContent = '下一步';
+    const close = (val)=>{ overlay.classList.remove('show'); sel.remove(); resolve(val); };
+    cancelBtn.addEventListener('click', ()=>close(null));
+    okBtn.addEventListener('click', ()=>close(sel.value));
+    actions.appendChild(cancelBtn); actions.appendChild(okBtn);
+    overlay.classList.add('show');
+  });
+}
+
+// 出貨看板格子上的「來自進貨」標籤：讓連結看得見、可以手動斷開。
+// 若你把這格改成另一張 CD 卻沒斷開，匯入時會把原本那片誤標成已上架。
+function renderBatchChip(i){
+  const el = document.getElementById(`batchchip-${i}`);
+  if(!el) return;
+  const ref = composerState[i].batchRef;
+  el.innerHTML = '';
+  if(!ref){ el.style.display = 'none'; return; }
+  const [bid] = ref.split('/');
+  const b = batches.find(x => x.id === bid);
+  const t = document.createElement('span');
+  t.textContent = '📦 來自進貨 ' + (b ? batchLabel(b) : '(批次已刪除)');
+  const x = document.createElement('button'); x.type = 'button'; x.className = 'small-icon'; x.textContent = '✕';
+  x.title = '解除連結（這格要改放別張 CD 時按這個）';
+  x.addEventListener('click', ()=>{ composerState[i].batchRef = ''; renderBatchChip(i); });
+  el.appendChild(t); el.appendChild(x);
+  el.style.display = 'flex';
+}
+
+// ---- 用商品編號查版本（年份、發行國）----
+// Discogs 不用帳號、允許瀏覽器直接查（手機也能用），日版收錄也最齊；查不到再試
+// MusicBrainz。實測：WPCP-4558→1991 日本、POCP-9094→1997 日本，都和使用者先前
+// 手寫的一致；POCP-9094 只有 Discogs 有。
+//
+// 編號不是唯一的，絕不能自己挑：實測 CRECD 169 查到 Oasis《Definitely Maybe》
+// 1994／1996／2000 三個年份＋保加利亞版，還混進一張 Teenage Fanclub。所以——
+//   1. 先用登記的藝人＋專輯過濾掉別張專輯
+//   2. 剩下只有一個版本才自動填；有好幾個就交給人選（上架時手上拿著那片，看背面就知道）
+const COUNTRY_ZH = { 'Japan':'日', 'US':'美', 'USA':'美', 'USA & Canada':'美', 'UK':'英', 'Europe':'歐',
+  'UK & Europe':'歐', 'Germany':'德', 'Taiwan':'台', 'Hong Kong':'港', 'South Korea':'韓', 'Korea':'韓',
+  'France':'法', 'Canada':'加', 'Australia':'澳', 'Netherlands':'荷', 'Italy':'義', 'China':'中國' };
+const MB_COUNTRY = { JP:'Japan', US:'US', GB:'UK', XE:'Europe', DE:'Germany', TW:'Taiwan', HK:'Hong Kong',
+  KR:'South Korea', FR:'France', CA:'Canada', AU:'Australia', NL:'Netherlands', IT:'Italy', CN:'China' };
+// 編號比對不管空白、連字號、大小寫：ESCA 0627 = esca-0627
+function normCat(s){ return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+function normTitle(s){ return String(s || '').toLowerCase().replace(/\(\d+\)/g, '').replace(/[^\p{L}\p{N}]+/gu, ''); }
+function countryLabel(c){ return COUNTRY_ZH[c] ? COUNTRY_ZH[c] + '版' : (c ? c + '版' : ''); }
+// Discogs 的藝人名會加「(2)」區分同名，例如「Oasis (2) - Definitely Maybe」
+function titleMatches(artistTitle, albumTitle, artist, album){
+  const a = normTitle(artist), b = normTitle(album), ra = normTitle(artistTitle), rb = normTitle(albumTitle);
+  if(a && ra && ra.indexOf(a) === -1 && a.indexOf(ra) === -1) return false;
+  if(b && rb && rb.indexOf(b) === -1 && b.indexOf(rb) === -1) return false;
+  return true;
+}
+// 版本＝（發行國, 年份）。年份不明的不算另一個版本，只是資料不全——除非全部都不明。
+function groupEditions(rows){
+  const dated = rows.filter(r => r.year);
+  const use = dated.length ? dated.concat(rows.filter(r => !r.year && !dated.some(d => d.country === r.country))) : rows;
+  const m = new Map();
+  use.forEach(r=>{
+    const k = countryLabel(r.country) + '|' + (r.year || '');
+    if(!m.has(k)) m.set(k, { year: r.year || '', country: r.country || '', count: 0 });
+    m.get(k).count++;
+  });
+  return Array.from(m.values()).sort((x, y)=> y.count - x.count || (x.year ? 0 : 1) - (y.year ? 0 : 1) || String(x.year).localeCompare(String(y.year)));
+}
+// 回傳 { status:'ok', year, country, src } ｜ { status:'ambiguous', options:[{year,country,count}], src } ｜ null
+async function lookupCatNo(catNo, fetchImpl, artist, album){
+  const want = normCat(catNo);
+  if(!want) return null;
+  const f = fetchImpl || ((u)=> fetch(u));
+  const decide = (rows, src)=>{
+    if(!rows.length) return null;
+    const eds = groupEditions(rows);
+    if(eds.length === 1) return { status: 'ok', year: eds[0].year, country: eds[0].country, src };
+    return { status: 'ambiguous', options: eds, src };
+  };
+  try{
+    const r = await f('https://api.discogs.com/database/search?type=release&catno=' + encodeURIComponent(catNo));
+    if(r && r.ok){
+      const d = await r.json();
+      const rows = (d.results || []).filter(x => normCat(x.catno) === want).filter(x=>{
+        const t = String(x.title || ''), i = t.indexOf(' - ');
+        return titleMatches(i >= 0 ? t.slice(0, i) : t, i >= 0 ? t.slice(i + 3) : '', artist, album);
+      }).map(x => ({ year: x.year ? String(x.year) : '', country: x.country || '' }));
+      const res = decide(rows, 'discogs');
+      if(res) return res;
+    }
+  }catch(e){}
+  try{
+    const r = await f('https://musicbrainz.org/ws/2/release?fmt=json&limit=25&query=catno:' + encodeURIComponent('"' + catNo + '"'));
+    if(r && r.ok){
+      const d = await r.json();
+      const rows = (d.releases || [])
+        .filter(x => (x['label-info'] || []).some(li => normCat(li['catalog-number']) === want))
+        .filter(x => titleMatches(((x['artist-credit'] || [])[0] || {}).name, x.title, artist, album))
+        .map(x => ({ year: String(x.date || '').slice(0, 4), country: MB_COUNTRY[x.country] || x.country || '' }));
+      const res = decide(rows, 'musicbrainz');
+      if(res) return res;
+    }
+  }catch(e){}
+  return null;
+}
+// 照使用者既有的寫法：「1991日版(WPCP-4558)，含英、日文歌詞解說」
+// 歌詞那段是推測（資料庫沒記錄側標內容）：只在「日版＋藝人名是英文字母」時加。
+// 日本歌手的日版不加——那樣寫就錯了。
+function editionNote(catNo, info, artist){
+  const cat = String(catNo || '').trim();
+  if(!info) return cat;
+  let s = (info.year || '') + countryLabel(info.country) + (cat ? '(' + cat + ')' : '');
+  if(info.country === 'Japan' && !/[぀-ヿ㐀-鿿가-힯]/.test(String(artist || ''))){
+    s += '，含英、日文歌詞解說';
+  }
+  return s;
+}
+function editionOptionLabel(o){ return ((o.year || '年份不明') + ' ' + countryLabel(o.country)).trim() + '（' + o.count + ' 筆）'; }
+
+// ===================== 進貨批次 =====================
+// batches = [{ id, date, source, mode:'avg'|'each', paid, fees, note, createdAt,
+//              items:[{ id, artist, album, catNo, note, price, cost, listingId }] }]
+//
+// 收到貨當下就登記這批有哪些片——還沒上架的貨從此在系統裡看得見，也能立刻比對
+// 客人許願。片存在批次裡，上架時（出貨看板「從進貨批次帶入」）才變成商品；
+// 這樣上架清單維持「只放真的在賣的」，既有的統計、篩選、待辦都不用學新狀態。
+//
+// 成本「寫進商品的成本欄」而不是即時計算：訂單成交時會把成本凍結成快照，報表讀的
+// 是那份。若即時從批次算，之後多一片、平均成本一變，已賣出的毛利就跟著跳。
+const num = (v)=> { const n = parseFloat(v); return isFinite(n) ? n : 0; };
+
+// 一次性的貨源名稱合併（使用者確認過的三組）。冪等：已合併的不會再動。
+const SOURCE_MERGES = { 'Letao': 'letao', 'biban': 'bibian', '大溪舊貨': '大溪' };
+function migrateSourceNames(){
+  const fix = (o)=>{ if(o && SOURCE_MERGES[o.source]){ o.source = SOURCE_MERGES[o.source]; return true; } return false; };
+  let l = false, o = false, a = false;
+  listings.forEach(x=>{ if(fix(x)) l = true; });
+  orders.forEach(x=>(x.items||[]).forEach(it=>{ if(fix(it)) o = true; }));
+  archive.forEach(x=>(x.items||[]).forEach(it=>{ if(fix(it)) a = true; }));
+  batches.forEach(b=>{ fix(b); });
+  return { listings: l, orders: o, archive: a };
+}
+
+// ---- 貨源清單（下拉選單共用）----
+function knownSources(){
+  const m = new Map();
+  const add = (s)=>{ s = String(s || '').trim(); if(s && !m.has(s.toLowerCase())) m.set(s.toLowerCase(), s); };
+  listings.forEach(l=>add(l.source));
+  batches.forEach(b=>add(b.source));
+  archive.forEach(o=>(o.items||[]).forEach(it=>add(it.source)));
+  return Array.from(m.values()).sort((x,y)=> x.localeCompare(y, 'zh-Hant', { sensitivity: 'base' }));
+}
+// 只差大小寫就套用既有的寫法：打 Letao 會變成既有的 letao，不會又多一個
+function canonicalSource(s){
+  const t = String(s || '').trim();
+  if(!t) return '';
+  return knownSources().find(x => x.toLowerCase() === t.toLowerCase()) || t;
+}
+function fillSourceSelect(sel, value, blankLabel){
+  const v = String(value || '').trim();
+  const list = knownSources();
+  if(v && list.indexOf(v) === -1) list.push(v);      // 舊資料裡的怪名稱也要能顯示
+  sel.innerHTML = '';
+  sel.appendChild(optionEl('', blankLabel || '（未指定）'));
+  list.forEach(s => sel.appendChild(optionEl(s, s)));
+  sel.appendChild(optionEl('__new__', '＋ 新增貨源…'));
+  sel.value = v;
+  sel.dataset.prev = v;
+}
+// onPick(值) 只在真的選定時呼叫；選「新增」會先跳輸入框
+function wireSourceSelect(sel, onPick, blankLabel){
+  sel.addEventListener('change', async ()=>{
+    if(sel.value !== '__new__'){ sel.dataset.prev = sel.value; onPick(sel.value); return; }
+    const name = await uiPrompt('新增貨源', '貨源名稱');
+    const c = canonicalSource(name);
+    if(!c){ fillSourceSelect(sel, sel.dataset.prev || '', blankLabel); return; }
+    fillSourceSelect(sel, c, blankLabel);
+    onPick(c);
+  });
+}
+
+// ---- 成本分攤 ----
+function batchTotal(b){
+  const items = b.items || [];
+  return b.mode === 'each'
+    ? items.reduce((s,it)=> s + num(it.price), 0) + num(b.fees)
+    : num(b.paid) + num(b.fees);
+}
+function discListed(it){ return !!(it.listingId && listings.some(l => l.id === it.listingId)); }
+// 已上架的片成本凍結（已經寫進商品，可能也已經賣掉）；剩下的錢分給還沒上架的。
+// 整數分攤：前幾張多 1 元，加總剛好等於付出去的錢——不會像手算 33×30 那樣少掉 10 元。
+function allocateBatchCosts(b){
+  const items = b.items || [];
+  const split = (amount, n)=>{ const base = n ? Math.floor(amount / n) : 0; return { base, rem: n ? amount - base * n : 0 }; };
+  if(b.mode === 'each'){
+    // 逐張：每張自己的價格＋其他費用平均分到每一張
+    const { base, rem } = split(Math.round(num(b.fees)), items.length);
+    items.forEach((it, i)=>{ if(!discListed(it)) it.cost = Math.round(num(it.price)) + base + (i < rem ? 1 : 0); });
+    return;
+  }
+  const open = items.filter(it => !discListed(it));
+  const used = items.filter(discListed).reduce((s,it)=> s + num(it.cost), 0);
+  const { base, rem } = split(Math.max(0, Math.round(batchTotal(b) - used)), open.length);
+  open.forEach((it, i)=>{ it.cost = base + (i < rem ? 1 : 0); });
+}
+
+// ---- 批量貼上：「藝人 - 專輯」或「藝人 - 專輯 | 編號」（逐張模式可再接「| 價格」）----
+// 一行就是一張，不做逗號拆分（專輯名稱可能有逗號）
+function parseBatchLines(text){
+  const out = [];
+  String(text || '').split(/\r?\n/).forEach(raw=>{
+    let line = raw.trim();
+    if(!line || /^```/.test(line)) return;
+    line = line.replace(/^(?:[-*•・‧]\s+|\d+\s*[.)、．]\s*)/, '').trim();
+    if(!line) return;
+    const segs = line.split(/\s*[|｜]\s*/);
+    const head = segs[0];
+    const m = head.match(/^(.+?)(?:\s+[-–—－]\s*|\s*[-–—－]\s+)(.*)$/);
+    const artist = (m ? m[1] : head).trim();
+    const album = (m ? m[2] : '').trim();
+    if(!artist) return;
+    out.push({ artist, album, catNo: (segs[1] || '').trim(), price: (segs[2] || '').trim() });
+  });
+  return out;
+}
+
+const BATCH_AI_PROMPT = [
+  '附上的照片是一疊 CD。請幫我列出每一張，格式固定為：',
+  '',
+  '藝人 - 專輯 | 編號',
+  '',
+  '1. 一行一張，中間是半形空格、減號、空格；編號前面是半形「 | 」',
+  '2. 藝人與專輯寫正式全名與正確大小寫',
+  '3. 編號是側標或背面的商品編號（例如 ESCA-0627、WPCP-4558）；看不到就省略「 | 編號」這段',
+  '4. 看不清楚、無法確定的，保留你讀到的文字並在行尾加上「（？）」，不要自己猜',
+  '5. 只輸出清單本身：不要編號、不要項目符號、不要任何說明文字',
+  ''
+].join('\n');
+
+// ---- 與客人許願比對 ----
+// 完全同一張，或客人寫「任何專輯」的同一位藝人，都算
+function batchWishHits(b){
+  const want = new Map();     // key → 想要的客人數
+  wishes.forEach(c=>(c.items||[]).forEach(it=>{
+    const k = wishKey(it.artist, it.album);
+    want.set(k, (want.get(k) || 0) + 1);
+  }));
+  const hits = [];
+  (b.items || []).forEach(it=>{
+    if(discListed(it)) return;
+    const n = (want.get(wishKey(it.artist, it.album)) || 0) + (want.get(wishKey(it.artist, '')) || 0);
+    if(n) hits.push({ it, n });
+  });
+  return hits;
+}
+
+async function saveBatches(){ await saveKey('batches', batches); }
+function batchLabel(b){ return (b.date || '') + '　' + (b.source || '(未指定貨源)'); }
+function openDiscCount(){ return batches.reduce((s,b)=> s + (b.items||[]).filter(it=>!discListed(it)).length, 0); }
+
+// ---- 新增區 ----
+function currentBatch(){ const v = document.getElementById('batchSel').value; return batches.find(b => b.id === v) || null; }
+function currentBatchMode(){ const b = currentBatch(); return b ? b.mode : document.getElementById('batchMode').value; }
+function refreshBatchForm(keepId){
+  const sel = document.getElementById('batchSel');
+  const cur = keepId !== undefined ? keepId : sel.value;
+  sel.innerHTML = '';
+  sel.appendChild(optionEl('', '＋ 新批次'));
+  batches.forEach(b => sel.appendChild(optionEl(b.id, batchLabel(b) + '（' + (b.items||[]).length + ' 張）')));
+  sel.value = batches.some(b => b.id === cur) ? cur : '';
+  const isNew = sel.value === '';
+  document.querySelectorAll('.batch-new').forEach(el => { el.style.display = isNew ? '' : 'none'; });
+  if(isNew){
+    if(!document.getElementById('batchDate').value) document.getElementById('batchDate').value = todayStr();
+    fillSourceSelect(document.getElementById('batchSource'), document.getElementById('batchSource').dataset.prev || '');
+    document.querySelectorAll('.batch-paid').forEach(el => { el.style.display = document.getElementById('batchMode').value === 'each' ? 'none' : ''; });
+  }
+  document.querySelectorAll('.bd-price').forEach(el => { el.style.display = currentBatchMode() === 'each' ? '' : 'none'; });
+}
+function batchFlash(msg){
+  const h = document.getElementById('batchHint');
+  h.textContent = msg; h.classList.add('show');
+  clearTimeout(h._t); h._t = setTimeout(()=> h.classList.remove('show'), 4500);
+}
+// 選了既有批次就加進去；「新批次」就用表單建一筆
+function resolveBatchTarget(){
+  const b = currentBatch();
+  if(b) return b;
+  const nb = {
+    id: genId(), date: document.getElementById('batchDate').value || todayStr(),
+    source: canonicalSource(document.getElementById('batchSource').value),
+    mode: document.getElementById('batchMode').value === 'each' ? 'each' : 'avg',
+    paid: document.getElementById('batchPaid').value.trim(),
+    fees: document.getElementById('batchFees').value.trim(),
+    note: document.getElementById('batchNote').value.trim(),
+    createdAt: new Date().toISOString(), items: []
+  };
+  batches.unshift(nb);
+  return nb;
+}
+async function commitDiscs(discs){
+  if(!discs.length){ batchFlash('沒有可以加入的片'); return false; }
+  const b = resolveBatchTarget();
+  discs.forEach(d => b.items.push({ id: genId(), artist: d.artist, album: d.album || '', catNo: d.catNo || '',
+                                     note: d.note || '', price: d.price || '', cost: 0, listingId: '' }));
+  allocateBatchCosts(b);
+  await saveBatches();
+  ['batchPaid','batchFees','batchNote'].forEach(id => { document.getElementById(id).value = ''; });
+  refreshBatchForm(b.id);       // 接下來的新增繼續進這一批
+  renderBatches();
+  const hits = batchWishHits(b);
+  batchFlash('已加入「' + batchLabel(b) + '」：' + discs.length + ' 張'
+    + (hits.length ? '　★ 其中 ' + hits.length + ' 張有客人在找' : ''));
+  return true;
+}
+
+// ---- 清單 ----
+function renderBatches(){
+  const box = document.getElementById('batchList'); box.innerHTML = '';
+  const q = document.getElementById('batchSearch').value.trim().toLowerCase();
+  const hit = (s)=> String(s || '').toLowerCase().indexOf(q) !== -1;
+  document.getElementById('batchCountLabel').textContent = '(' + batches.length + ')';
+  document.getElementById('tabBadgeIntake').textContent = openDiscCount();
+  let list = batches;
+  if(q) list = list.filter(b => hit(b.source) || hit(b.note) || (b.items||[]).some(it => hit(it.artist) || hit(it.album) || hit(it.catNo)));
+  if(!list.length){
+    const p = document.createElement('div'); p.className = 'muted-small'; p.style.padding = '18px 4px';
+    p.textContent = batches.length ? '沒有符合的批次。' : '還沒有登記任何進貨。'; box.appendChild(p); return;
+  }
+  list.forEach(b=>{
+    const items = b.items || [];
+    const listedN = items.filter(discListed).length;
+    const card = document.createElement('div'); card.className = 'wish-card';
+
+    const head = document.createElement('div'); head.className = 'wish-head';
+    const date = document.createElement('input'); date.type = 'date'; date.value = b.date || '';
+    date.style.cssText = 'width:auto;max-width:150px;';
+    date.addEventListener('change', async ()=>{ b.date = date.value; await saveBatches(); refreshBatchForm(); renderBatches(); });
+    const src = document.createElement('select'); src.className = 'status-select';
+    src.style.cssText = 'width:auto;max-width:160px;';
+    fillSourceSelect(src, b.source);
+    wireSourceSelect(src, async (v)=>{ b.source = v; await saveBatches(); refreshBatchForm(); renderBatches(); });
+    const mode = document.createElement('select'); mode.className = 'status-select';
+    mode.style.cssText = 'width:auto;';
+    mode.appendChild(optionEl('avg', '整批平均')); mode.appendChild(optionEl('each', '逐張填寫')); mode.value = b.mode;
+    mode.addEventListener('change', async ()=>{ b.mode = mode.value; allocateBatchCosts(b); await saveBatches(); refreshBatchForm(); renderBatches(); });
+    head.appendChild(date); head.appendChild(src); head.appendChild(mode);
+    const money = (label, key)=>{
+      const wrap = document.createElement('span'); wrap.className = 'muted-small';
+      wrap.appendChild(document.createTextNode(label + ' '));
+      const inp = makeNumberInput(b[key], async v=>{ b[key] = v; allocateBatchCosts(b); await saveBatches(); renderBatches(); });
+      inp.style.width = '80px';
+      wrap.appendChild(inp); return wrap;
+    };
+    if(b.mode !== 'each') head.appendChild(money('付款', 'paid'));
+    head.appendChild(money('其他費用', 'fees'));
+    const del = document.createElement('button'); del.type = 'button'; del.className = 'danger-ghost'; del.textContent = '刪除批次';
+    del.addEventListener('click', async ()=>{
+      const msg = listedN
+        ? '這批有 ' + listedN + ' 張已經上架。刪除批次不會動到那些商品（成本已經寫進去了），只是不再追蹤這批。確定刪除？'
+        : '確定要刪除「' + batchLabel(b) + '」和裡面的 ' + items.length + ' 張嗎？';
+      if(!(await uiConfirm(msg))) return;
+      batches = batches.filter(x => x.id !== b.id);
+      await saveBatches(); refreshBatchForm(); renderBatches();
+    });
+    head.appendChild(del);
+    card.appendChild(head);
+
+    const sum = document.createElement('div'); sum.className = 'muted-small'; sum.style.padding = '6px 2px';
+    const total = batchTotal(b);
+    const allocated = items.reduce((s,it)=> s + num(it.cost), 0);
+    sum.textContent = items.length + ' 張　待上架 ' + (items.length - listedN) + '　已上架 ' + listedN
+      + '　成本合計 ' + fmtMoney(total)
+      + (items.length && b.mode !== 'each' ? '　平均每張 ' + fmtMoney(Math.round(total / items.length)) : '')
+      + (Math.round(allocated) !== Math.round(total) ? '　⚠ 已分配 ' + fmtMoney(allocated) + '（上架後又改了金額或張數）' : '');
+    card.appendChild(sum);
+    const noteIn = makeTextInput(b.note, async v=>{ b.note = v.trim(); await saveBatches(); });
+    noteIn.placeholder = '批次備註'; noteIn.style.cssText = 'font-size:12px;margin-bottom:4px;';
+    card.appendChild(noteIn);
+
+    const hits = batchWishHits(b);
+    if(hits.length){
+      const w = document.createElement('div');
+      w.style.cssText = 'font-size:12.5px;color:var(--gold);padding:4px 2px 6px;';
+      w.textContent = '★ 這批有 ' + hits.length + ' 張是客人在找的：'
+        + hits.map(h => h.it.artist + ' - ' + (h.it.album || '?') + '（' + h.n + ' 位）').join('、');
+      card.appendChild(w);
+    }
+
+    items.forEach(it=>{
+      const listed = discListed(it);
+      const line = document.createElement('div'); line.className = 'wish-row' + (listed ? ' have' : '');
+      line.style.flexWrap = 'wrap';
+      const st = document.createElement('span');
+      st.textContent = listed ? '已上架' : '待上架';
+      st.style.cssText = 'font-size:11px;min-width:42px;flex-shrink:0;margin-top:5px;color:' + (listed ? 'var(--teal)' : 'var(--text-muted)') + ';';
+      line.appendChild(st);
+      const f = (key, ph, w)=>{
+        const inp = makeTextInput(it[key], async v=>{
+          it[key] = v.trim();
+          if(key === 'catNo') delete it.lookup;      // 編號改了，上次查到的版本就不算數
+          await saveBatches(); renderBatches();
+        });
+        inp.placeholder = ph; inp.style.cssText = 'font-size:12.5px;max-width:' + w + ';';
+        inp.disabled = listed;     // 已上架的請到商品本身去改，避免兩邊不一致
+        return inp;
+      };
+      line.appendChild(f('artist', '藝人', '170px'));
+      line.appendChild(f('album', '專輯', '200px'));
+      line.appendChild(f('catNo', '編號', '110px'));
+      line.appendChild(f('note', '備註', '170px'));
+      if(b.mode === 'each'){
+        const pr = makeNumberInput(it.price, async v=>{ it.price = v; allocateBatchCosts(b); await saveBatches(); renderBatches(); });
+        pr.placeholder = '價格'; pr.style.width = '72px'; pr.disabled = listed;
+        line.appendChild(pr);
+      }
+      const cost = document.createElement('span');
+      cost.textContent = '成本 ' + fmtMoney(it.cost || 0);
+      cost.style.cssText = 'font-size:12px;color:var(--gold);margin-top:5px;margin-left:auto;font-family:"JetBrains Mono",monospace;';
+      line.appendChild(cost);
+      const x = document.createElement('button'); x.type = 'button'; x.className = 'small-icon'; x.textContent = '✕';
+      x.disabled = listed; x.title = listed ? '已經上架的不能從批次移除' : '從這批移除';
+      x.addEventListener('click', async ()=>{
+        b.items = b.items.filter(y => y.id !== it.id);
+        allocateBatchCosts(b); await saveBatches(); refreshBatchForm(); renderBatches();
+      });
+      line.appendChild(x);
+      card.appendChild(line);
+    });
+    box.appendChild(card);
+  });
+}
+
+// ---- 出貨看板：從進貨批次帶入 ----
+// 只填空的格子、同一片不會被帶進來兩次；格子記住 batchRef，匯入時用來把那片標成已上架
+function composerSlotEmpty(s){ return !(s.artist || s.album || s.imgSrc || s.price); }
+let LOOKUP_GAP_MS = 1100;   // MusicBrainz 每秒 1 次、Discogs 未登入每分鐘 25 次，兩邊都守得住
+async function pullBatchIntoComposer(){
+  const usable = batches.filter(b => (b.items||[]).some(it => !discListed(it)));
+  if(!usable.length){ await uiAlert('目前沒有待上架的進貨。先到「進貨」分頁登記。'); return; }
+  const id = await uiPickFrom('要從哪一批帶入？', usable.map(b => ({
+    value: b.id, label: batchLabel(b) + '　待上架 ' + b.items.filter(it => !discListed(it)).length + ' 張' })));
+  if(!id) return;
+  const b = batches.find(x => x.id === id);
+  const inComposer = new Set(composerState.map(s => s.batchRef).filter(Boolean));
+  const queue = b.items.filter(it => !discListed(it) && !inComposer.has(b.id + '/' + it.id));
+  const empty = [];
+  for(let i = 0; i < SLOTS; i++) if(composerSlotEmpty(composerState[i])) empty.push(i);
+  if(!empty.length){ await uiAlert('出貨看板沒有空的格子了，先清掉一些再帶入。'); return; }
+  const take = queue.slice(0, empty.length);
+
+  // 用編號查版本，只查沒查過的（結果記在那片上，下次帶入不必再查）
+  const btn = document.getElementById('pullBatchBtn');
+  const label = btn.textContent;
+  const todo = take.filter(it => it.catNo && !it.lookup);
+  try{
+    for(let k = 0; k < todo.length; k++){
+      btn.disabled = true; btn.textContent = '查詢版本中… ' + (k + 1) + '/' + todo.length;
+      const info = await lookupCatNo(todo[k].catNo, null, todo[k].artist, todo[k].album);
+      todo[k].lookup = info || { status: 'none' };
+      if(k < todo.length - 1) await new Promise(r => setTimeout(r, LOOKUP_GAP_MS));
+    }
+  } finally { btn.disabled = false; btn.textContent = label; }
+  // 一個編號對到好幾個版本：讓人選（你上架時手上就拿著那片）。選了就記住，下次不再問。
+  for(const it of take){
+    if(!it.lookup || it.lookup.status !== 'ambiguous') continue;
+    const opts = it.lookup.options.map((o, n) => ({ value: String(n), label: editionOptionLabel(o) }));
+    opts.push({ value: 'none', label: '都不是／只寫編號，我自己補' });
+    const pick = await uiPickFrom(it.artist + ' - ' + (it.album || '') + '（' + it.catNo + '）有好幾個版本，你手上的是？', opts);
+    if(pick === null) continue;                       // 取消：這次只寫編號，下次帶入還會再問
+    it.lookup = pick === 'none' ? { status: 'none', chosen: true }
+              : Object.assign({ status: 'ok', chosen: true, src: it.lookup.src }, it.lookup.options[Number(pick)]);
+  }
+  await saveBatches();
+
+  let found = 0, missed = 0;
+  take.forEach((it, j)=>{
+    const info = it.lookup && it.lookup.status === 'ok' ? it.lookup : null;
+    if(it.catNo){ if(info) found++; else missed++; }
+    Object.assign(composerState[empty[j]], {
+      artist: it.artist, album: it.album, cost: String(it.cost || 0), source: b.source || '',
+      notes: [editionNote(it.catNo, info, it.artist), it.note].filter(Boolean).join('，'),
+      batchRef: b.id + '/' + it.id
+    });
+  });
+  hydrateComposerUI();
+  renderBatches();
+  const left = queue.length - take.length;
+  let msg = '已帶入 ' + take.length + ' 張' + (left ? '，這批還有 ' + left + ' 張待上架（格子不夠，下次再帶）' : '') + '。';
+  if(found) msg += '\n\n' + found + ' 張依編號查到版本，已寫進備註。「含英、日文歌詞解說」是依日版推測的，上架前請對一下手上那片的歌詞本。';
+  if(missed) msg += '\n\n' + missed + ' 張沒有確定版本（查不到、或版本不只一個沒選），備註只放了編號，請自己補。';
+  await uiAlert(msg + '\n\n補上照片和價格後照常產生、匯入即可。');
+}
+
+// 匯入後把批次裡對應的片標成已上架
+function linkImportedToBatches(parsed){
+  let changed = false;
+  parsed.forEach(l=>{
+    const ref = l._batchRef; delete l._batchRef;
+    if(!ref) return;
+    const [bid, iid] = String(ref).split('/');
+    const b = batches.find(x => x.id === bid);
+    const it = b && (b.items || []).find(x => x.id === iid);
+    if(!it || discListed(it)) return;
+    it.listingId = l.id;
+    it.cost = num(l.cost);             // 以實際寫進商品的成本為準（看板上可能手動改過）
+    changed = true;
+  });
+  return changed;
+}
+
+document.getElementById('batchSel').addEventListener('change', ()=> refreshBatchForm());
+document.getElementById('batchMode').addEventListener('change', ()=> refreshBatchForm());
+wireSourceSelect(document.getElementById('batchSource'), ()=>{});
+document.getElementById('bdAddBtn').addEventListener('click', async ()=>{
+  const artist = document.getElementById('bdArtist').value.trim();
+  if(!artist){ batchFlash('請先填藝人'); return; }
+  const ok = await commitDiscs([{ artist, album: document.getElementById('bdAlbum').value.trim(),
+    catNo: document.getElementById('bdCatNo').value.trim(), note: document.getElementById('bdNote').value.trim(),
+    price: document.getElementById('bdPrice').value.trim() }]);
+  if(ok){ ['bdArtist','bdAlbum','bdCatNo','bdNote','bdPrice'].forEach(id => { document.getElementById(id).value = ''; });
+          document.getElementById('bdArtist').focus(); }
+});
+document.getElementById('batchPasteBtn').addEventListener('click', async ()=>{
+  if(await commitDiscs(parseBatchLines(document.getElementById('batchPasteBox').value)))
+    document.getElementById('batchPasteBox').value = '';
+});
+document.getElementById('batchCopyPromptBtn').addEventListener('click', async ()=>{
+  await copyText(BATCH_AI_PROMPT, document.getElementById('batchPromptHint'));
+});
+document.getElementById('batchSearch').addEventListener('input', renderBatches);
 
 function renderOrders(){
   const tbody = document.getElementById('ordersBody'); tbody.innerHTML = '';
@@ -3999,7 +4633,7 @@ async function buildBackupObject(opts){
     _version: 2,
     exportedAt: new Date().toISOString(),
     textOnly: !withImages,
-    listings, orders, archive, wishes, images
+    listings, orders, archive, wishes, batches, images
   };
 }
 
@@ -4030,14 +4664,17 @@ async function applyBackupObject(data, mode){
   // 許願清單是後來才加的欄位：舊的備份／同步檔裡沒有它。沒有就保持本機原樣——
   // 若當成空陣列，用舊備份「還原（覆蓋）」或讀到舊同步檔，就會把許願清單整個清掉。
   const hasWishes = Array.isArray(data.wishes);
+  const hasBatches = Array.isArray(data.batches);     // 同理：舊檔沒有進貨批次，不可以當成空的
   if(mode === 'merge'){
     listings = mergeById(listings, inListings);
     orders = mergeById(orders, inOrders);
     archive = mergeById(archive, inArchive);
     if(hasWishes) wishes = mergeById(wishes, data.wishes);
+    if(hasBatches) batches = mergeById(batches, data.batches);
   } else {
     listings = inListings; orders = inOrders; archive = inArchive;
     if(hasWishes) wishes = data.wishes;
+    if(hasBatches) batches = data.batches;
     // overwrite 會先清空本機圖庫再從備份還原。**純文字備份（同步檔）不含圖片**，
     // 若照做就會把整個圖庫清光而且救不回來 → 沒有圖片的備份一律不清。
     const hasImages = data.images && typeof data.images === 'object' && Object.keys(data.images).length > 0;
@@ -4062,6 +4699,10 @@ async function applyBackupObject(data, mode){
   await saveKey('listings', listings);
   await saveKey('orders', orders);
   await saveKey('archive', archive);
+  if(hasBatches){
+    await saveKey('batches', batches);
+    if(document.getElementById('batchList')){ refreshBatchForm(); renderBatches(); }
+  }
   if(hasWishes){
     await saveKey('wishes', wishes);
     if(document.getElementById('wishList')){ refreshWishCustomerSel(); renderWishes(); }
@@ -4975,6 +5616,12 @@ async function init(){
   orders = await loadKey('orders');
   archive = await loadKey('archive');
   wishes = await loadKey('wishes');
+  batches = await loadKey('batches');
+  // 一次性貨源名稱合併（Letao→letao 等）：冪等，改過就存
+  const mg = migrateSourceNames();
+  if(mg.listings) await saveKey('listings', listings);
+  if(mg.orders) await saveKey('orders', orders);
+  if(mg.archive) await saveKey('archive', archive);
   // 三軸曲風分類：把舊的單一 genre 一次性遷移到 subgenres（冪等、非破壞）
   if(migrateTaxonomy(listings)) await saveKey('listings', listings);
   refreshTaxonomyDatalists();
@@ -5002,6 +5649,10 @@ async function init(){
 
   renderListings(); renderOrders(); renderArchive();
   refreshWishCustomerSel(); renderWishes();
+  refreshBatchForm(); renderBatches();
+  fillSourceSelect(document.getElementById('lstSource'), '');
+  fillSourceSelect(document.getElementById('edtSource'), '', '（不改）');
+  for(let i = 0; i < SLOTS; i++){ const ss = document.getElementById(`source-${i}`); if(ss) fillSourceSelect(ss, composerState[i].source); }
   renderTodoBanner();
 }
 init().then(()=>{ window.__cdReady = true; });
