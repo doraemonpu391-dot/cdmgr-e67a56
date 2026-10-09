@@ -517,6 +517,10 @@
   <section class="tab-panel" id="tab-listings">
     <div class="panel-card">
       <h2>新增上架商品</h2>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+        <button class="secondary" id="lstPullBatchBtn" type="button">📦 從進貨批次帶入</button>
+        <div class="batch-chip" id="lstBatchChip" style="display:none;"></div>
+      </div>
       <div class="form-grid">
         <div><label class="field">藝人名稱</label><input type="text" id="lstArtist" placeholder="例如：周杰倫"></div>
         <div><label class="field">專輯名稱</label><input type="text" id="lstAlbum" placeholder="例如：范特西"></div>
@@ -2001,14 +2005,20 @@ document.getElementById('addListingBtn').addEventListener('click', async ()=>{
 
   const newId = genId();
   if(_lstPendingImg){ await imgSet(newId, _lstPendingImg); }   // 先寫圖片，hasImage 才正確
-  listings.push({
+  const item = {
     id: newId, artist, album, price, cost, source, notes, platforms,
     regions, genres, subgenres,
     biddingType, auctionEnd, sideLabel, notPublic, noPromo, hasImage: !!_lstPendingImg,
     status: '在售', dateAdded: todayStr()
-  });
+  };
+  listings.push(item);
   _lstPendingImg = null; renderLstThumb();
   await saveKey('listings', listings);
+  if(_lstBatchRef){
+    // 把進貨批次裡那片標成已上架（成本以實際寫進商品的為準）
+    if(linkImportedToBatches([Object.assign({ _batchRef: _lstBatchRef }, item)])){ await saveBatches(); renderBatches(); }
+    _lstBatchRef = ''; renderLstBatchChip();
+  }
   refreshTaxonomyDatalists();
 
   ['lstArtist','lstAlbum','lstPrice','lstCost','lstSource','lstRegion','lstGenre','lstSub','lstNotes','lstAuctionEnd'].forEach(id=> document.getElementById(id).value = '');
@@ -3719,9 +3729,11 @@ function uiPickFrom(message, options){
 // 出貨看板格子上的「來自進貨」標籤：讓連結看得見、可以手動斷開。
 // 若你把這格改成另一張 CD 卻沒斷開，匯入時會把原本那片誤標成已上架。
 function renderBatchChip(i){
-  const el = document.getElementById(`batchchip-${i}`);
+  fillBatchChip(document.getElementById(`batchchip-${i}`), composerState[i].batchRef,
+    ()=>{ composerState[i].batchRef = ''; renderBatchChip(i); });
+}
+function fillBatchChip(el, ref, onClear){
   if(!el) return;
-  const ref = composerState[i].batchRef;
   el.innerHTML = '';
   if(!ref){ el.style.display = 'none'; return; }
   const [bid] = ref.split('/');
@@ -3729,8 +3741,8 @@ function renderBatchChip(i){
   const t = document.createElement('span');
   t.textContent = '📦 來自進貨 ' + (b ? batchLabel(b) : '(批次已刪除)');
   const x = document.createElement('button'); x.type = 'button'; x.className = 'small-icon'; x.textContent = '✕';
-  x.title = '解除連結（這格要改放別張 CD 時按這個）';
-  x.addEventListener('click', ()=>{ composerState[i].batchRef = ''; renderBatchChip(i); });
+  x.title = '解除連結（要改放別張 CD 時按這個）';
+  x.addEventListener('click', onClear);
   el.appendChild(t); el.appendChild(x);
   el.style.display = 'flex';
 }
@@ -4212,15 +4224,38 @@ function renderBatches(){
 // 只填空的格子、同一片不會被帶進來兩次；格子記住 batchRef，匯入時用來把那片標成已上架
 function composerSlotEmpty(s){ return !(s.artist || s.album || s.imgSrc || s.price); }
 let LOOKUP_GAP_MS = 1100;   // MusicBrainz 每秒 1 次、Discogs 未登入每分鐘 25 次，兩邊都守得住
-async function pullBatchIntoComposer(){
-  const usable = batches.filter(b => (b.items||[]).some(it => !discListed(it)));
-  if(!usable.length){ await uiAlert('目前沒有待上架的進貨。先到「進貨」分頁登記。'); return; }
+// 可以帶入的片：還沒上架，也沒有正在看板或「新增上架商品」表單裡等著（避免同一片上架兩次）
+function discAvailable(b, it){
+  const ref = b.id + '/' + it.id;
+  return !discListed(it) && !composerState.some(s => s.batchRef === ref) && _lstBatchRef !== ref;
+}
+// 選批次；只有一批有貨就不用問
+async function pickPendingBatch(){
+  const usable = batches.filter(b => (b.items || []).some(it => discAvailable(b, it)));
+  if(!usable.length){ await uiAlert('目前沒有待上架的進貨。先到「進貨」分頁登記。'); return null; }
+  if(usable.length === 1) return usable[0];
   const id = await uiPickFrom('要從哪一批帶入？', usable.map(b => ({
-    value: b.id, label: batchLabel(b) + '　待上架 ' + b.items.filter(it => !discListed(it)).length + ' 張' })));
-  if(!id) return;
-  const b = batches.find(x => x.id === id);
-  const inComposer = new Set(composerState.map(s => s.batchRef).filter(Boolean));
-  const queue = b.items.filter(it => !discListed(it) && !inComposer.has(b.id + '/' + it.id));
+    value: b.id, label: batchLabel(b) + '　待上架 ' + b.items.filter(it => discAvailable(b, it)).length + ' 張' })));
+  return id ? batches.find(x => x.id === id) : null;
+}
+// 一個編號對到好幾個版本：讓人選（你上架時手上就拿著那片）。選了就記住，下次不再問；取消＝這次只寫編號
+async function pickEditionFor(it){
+  if(!it.lookup || it.lookup.status !== 'ambiguous') return;
+  const opts = it.lookup.options.map((o, n) => ({ value: String(n), label: editionOptionLabel(o) }));
+  opts.push({ value: 'none', label: '都不是／只寫編號，我自己補' });
+  const pick = await uiPickFrom(it.artist + ' - ' + (it.album || '') + '（' + it.catNo + '）有好幾個版本，你手上的是？', opts);
+  if(pick === null) return;
+  it.lookup = pick === 'none' ? { status: 'none', chosen: true }
+            : Object.assign({ status: 'ok', chosen: true, src: it.lookup.src }, it.lookup.options[Number(pick)]);
+}
+function discNotes(it){
+  const info = it.lookup && it.lookup.status === 'ok' ? it.lookup : null;
+  return [editionNote(it.catNo, info, it.artist), it.note].filter(Boolean).join('，');
+}
+async function pullBatchIntoComposer(){
+  const b = await pickPendingBatch();
+  if(!b) return;
+  const queue = b.items.filter(it => discAvailable(b, it));
   const empty = [];
   for(let i = 0; i < SLOTS; i++) if(composerSlotEmpty(composerState[i])) empty.push(i);
   if(!empty.length){ await uiAlert('出貨看板沒有空的格子了，先清掉一些再帶入。'); return; }
@@ -4238,25 +4273,15 @@ async function pullBatchIntoComposer(){
       if(k < todo.length - 1) await new Promise(r => setTimeout(r, LOOKUP_GAP_MS));
     }
   } finally { btn.disabled = false; btn.textContent = label; }
-  // 一個編號對到好幾個版本：讓人選（你上架時手上就拿著那片）。選了就記住，下次不再問。
-  for(const it of take){
-    if(!it.lookup || it.lookup.status !== 'ambiguous') continue;
-    const opts = it.lookup.options.map((o, n) => ({ value: String(n), label: editionOptionLabel(o) }));
-    opts.push({ value: 'none', label: '都不是／只寫編號，我自己補' });
-    const pick = await uiPickFrom(it.artist + ' - ' + (it.album || '') + '（' + it.catNo + '）有好幾個版本，你手上的是？', opts);
-    if(pick === null) continue;                       // 取消：這次只寫編號，下次帶入還會再問
-    it.lookup = pick === 'none' ? { status: 'none', chosen: true }
-              : Object.assign({ status: 'ok', chosen: true, src: it.lookup.src }, it.lookup.options[Number(pick)]);
-  }
+  for(const it of take) await pickEditionFor(it);
   await saveBatches();
 
   let found = 0, missed = 0;
   take.forEach((it, j)=>{
-    const info = it.lookup && it.lookup.status === 'ok' ? it.lookup : null;
-    if(it.catNo){ if(info) found++; else missed++; }
+    if(it.catNo){ if(it.lookup && it.lookup.status === 'ok') found++; else missed++; }
     Object.assign(composerState[empty[j]], {
       artist: it.artist, album: it.album, cost: String(it.cost || 0), source: b.source || '',
-      notes: [editionNote(it.catNo, info, it.artist), it.note].filter(Boolean).join('，'),
+      notes: discNotes(it),
       batchRef: b.id + '/' + it.id
     });
   });
@@ -4285,6 +4310,44 @@ function linkImportedToBatches(parsed){
   });
   return changed;
 }
+
+// ---- 上架清單「新增上架商品」：從進貨批次帶入一片 ----
+let _lstBatchRef = '';
+function renderLstBatchChip(){
+  fillBatchChip(document.getElementById('lstBatchChip'), _lstBatchRef, ()=>{ _lstBatchRef = ''; renderLstBatchChip(); });
+}
+async function pullBatchIntoQuickAdd(){
+  const b = await pickPendingBatch();
+  if(!b) return;
+  const open = b.items.filter(it => discAvailable(b, it));
+  const iid = open.length === 1 ? open[0].id : await uiPickFrom('要帶入哪一張？', open.map(it => ({
+    value: it.id, label: it.artist + ' - ' + (it.album || '?') + (it.catNo ? '（' + it.catNo + '）' : '') })));
+  if(!iid) return;
+  const it = b.items.find(x => x.id === iid);
+  const btn = document.getElementById('lstPullBatchBtn');
+  if(it.catNo && !it.lookup){
+    const label = btn.textContent;
+    btn.disabled = true; btn.textContent = '查詢版本中…';
+    try{ it.lookup = (await lookupCatNo(it.catNo, null, it.artist, it.album)) || { status: 'none' }; }
+    finally{ btn.disabled = false; btn.textContent = label; }
+  }
+  await pickEditionFor(it);
+  await saveBatches();
+  document.getElementById('lstArtist').value = it.artist || '';
+  document.getElementById('lstAlbum').value = it.album || '';
+  document.getElementById('lstCost').value = String(it.cost || 0);
+  fillSourceSelect(document.getElementById('lstSource'), b.source || '');
+  document.getElementById('lstNotes').value = discNotes(it);
+  _lstBatchRef = b.id + '/' + it.id;
+  renderLstBatchChip();
+  document.getElementById('lstPrice').focus();
+}
+document.getElementById('lstPullBatchBtn').addEventListener('click', pullBatchIntoQuickAdd);
+document.getElementById('pullBatchBtn').addEventListener('click', pullBatchIntoComposer);
+// 藝人清空＝這筆不再是那片了，斷開進貨連結（同出貨看板）
+document.getElementById('lstArtist').addEventListener('input', (e)=>{
+  if(!e.target.value.trim() && _lstBatchRef){ _lstBatchRef = ''; renderLstBatchChip(); }
+});
 
 document.getElementById('batchSel').addEventListener('change', ()=> refreshBatchForm());
 document.getElementById('batchMode').addEventListener('change', ()=> refreshBatchForm());
