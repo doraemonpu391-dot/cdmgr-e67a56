@@ -3919,7 +3919,8 @@ async function lookupEditionForSlot(i){
 const num = (v)=> { const n = parseFloat(v); return isFinite(n) ? n : 0; };
 
 // 一次性的貨源名稱合併（使用者確認過的三組）。冪等：已合併的不會再動。
-const SOURCE_MERGES = { 'Letao': 'letao', 'biban': 'bibian', '大溪舊貨': '大溪' };
+const SOURCE_MERGES = { 'Letao': 'letao', 'biban': 'bibian', '大溪舊貨': '大溪',
+  '雅客二手書店': '雅博客', '633': 'Y1113126633' };
 function migrateSourceNames(){
   const fix = (o)=>{ if(o && SOURCE_MERGES[o.source]){ o.source = SOURCE_MERGES[o.source]; return true; } return false; };
   let l = false, o = false, a = false;
@@ -4856,6 +4857,9 @@ async function applyBackupObject(data, mode){
     }
   }
   migrateTaxonomy(listings);   // 匯入/同步進來的舊資料也補上三軸分類欄
+  // 同步檔／備份裡還是舊的貨源名（Letao 等）也要合併。少了這行，Mac 開 App 時先合併、
+  // 接著讀 iCloud 同步檔又被舊名蓋回去，再寫回同步檔——永遠合併不掉（2026-10-10 實際發生）
+  migrateSourceNames();
 
   let restoredImgs = 0;
   if(data.images && typeof data.images === 'object'){
