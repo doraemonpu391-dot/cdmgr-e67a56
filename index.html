@@ -74,6 +74,9 @@
   .batch-chip{align-items:center;gap:6px;font-size:11.5px;color:var(--teal);margin:4px 0 2px;}
   .notes-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
   .notes-head label.field{margin-bottom:0;}
+  button.disc-pick-row{display:block;width:100%;text-align:left;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:8px 12px;color:var(--text);cursor:pointer;font-size:13.5px;}
+  button.disc-pick-row:hover{border-color:var(--gold-deep);}
+  button.disc-pick-row .muted-small{margin-top:2px;}
   .wish-sub{margin:16px 0 6px;font-size:13px;color:var(--teal);font-weight:600;letter-spacing:.5px;}
   .wish-view.active{border-color:var(--gold);color:var(--gold);}
   .wish-card{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-bottom:10px;}
@@ -1394,7 +1397,7 @@ function buildCards(){
         <div class="hint"><b>＋</b>點擊上傳照片</div>
         <input type="file" accept="image/*,.heic,.heif" id="file-${i}">
       </div>
-      <div class="field-group"><label class="field">藝人名稱</label><input type="text" id="artist-${i}" placeholder="例如：周杰倫"></div>
+      <div class="field-group"><div class="notes-head"><label class="field">藝人名稱</label><button type="button" class="small-icon" id="slotpull-${i}" title="從待上架的進貨挑一張放進這格">📦 從進貨選</button></div><input type="text" id="artist-${i}" placeholder="例如：周杰倫"></div>
       <div class="field-group"><label class="field">專輯名稱</label><input type="text" id="album-${i}" placeholder="例如：范特西"></div>
       <div class="two-col">
         <div class="field-group"><label class="field">標價（NT$）</label><input type="number" id="price-${i}" min="0"></div>
@@ -1440,6 +1443,7 @@ function buildCards(){
       });
     });
     document.getElementById(`edlookup-${i}`).addEventListener('click', ()=> lookupEditionForSlot(i));
+    document.getElementById(`slotpull-${i}`).addEventListener('click', ()=> pickDiscForSlot(i));
     fillSourceSelect(document.getElementById(`source-${i}`), composerState[i].source);
     wireSourceSelect(document.getElementById(`source-${i}`), (v)=>{ composerState[i].source = v; refreshCardFilledState(i); });
     document.getElementById(`sidelabel-${i}`).addEventListener('change', (e)=>{ composerState[i].sideLabel = e.target.checked; });
@@ -4386,20 +4390,88 @@ function linkImportedToBatches(parsed){
   return changed;
 }
 
-// ---- 上架清單「新增上架商品」：從進貨批次帶入一片 ----
-let _lstBatchRef = '';
-function renderLstBatchChip(){
-  fillBatchChip(document.getElementById('lstBatchChip'), _lstBatchRef, ()=>{ _lstBatchRef = ''; renderLstBatchChip(); });
+// ---- 依專輯挑一張待上架的片（出貨看板每格、上架清單新增都用這個）----
+// 使用者記得的是「要上哪張專輯」，不是「它在哪一批」：先搜專輯（藝人／專輯／編號都能搜），
+// 同一張在好幾批都有（或同一批買了兩片），再選來自哪一批——看得到各自的成本和編號。
+function discGroups(){
+  const m = new Map();
+  batches.forEach(b => (b.items || []).forEach(it=>{
+    if(!discAvailable(b, it)) return;
+    const k = normTitle(it.artist) + '|' + normTitle(it.album);
+    if(!m.has(k)) m.set(k, { artist: it.artist, album: it.album || '', copies: [] });
+    m.get(k).copies.push({ b, it });
+  }));
+  return Array.from(m.values()).sort((x, y)=>
+    (x.artist + ' ' + x.album).localeCompare(y.artist + ' ' + y.album, 'zh-Hant', { sensitivity: 'base' }));
 }
-async function pullBatchIntoQuickAdd(){
-  const b = await pickPendingBatch();
-  if(!b) return;
-  const open = b.items.filter(it => discAvailable(b, it));
-  const iid = open.length === 1 ? open[0].id : await uiPickFrom('要帶入哪一張？', open.map(it => ({
-    value: it.id, label: it.artist + ' - ' + (it.album || '?') + (it.catNo ? '（' + it.catNo + '）' : '') })));
-  if(!iid) return;
-  const it = b.items.find(x => x.id === iid);
-  const btn = document.getElementById('lstPullBatchBtn');
+// 回傳 { b, it }；取消回 null
+function uiDiscPicker(title){
+  const groups = discGroups();
+  if(!groups.length) return uiAlert('目前沒有待上架的進貨。先到「進貨」分頁登記。').then(()=> null);
+  return new Promise(resolve=>{
+    const overlay = document.getElementById('modalOverlay');
+    const box = overlay.querySelector('.modal-box');
+    const actions = document.getElementById('modalActions');
+    const msg = document.getElementById('modalMsg');
+    msg.textContent = title;
+    actions.innerHTML = '';
+    const wrap = document.createElement('div'); wrap.style.cssText = 'margin-bottom:14px;text-align:left;';
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.id = 'discPickSearch'; inp.autocomplete = 'off'; inp.style.width = '100%';
+    inp.placeholder = '例如 kimbra、vows、WPCP';
+    const list = document.createElement('div'); list.id = 'discPickList';
+    list.style.cssText = 'max-height:48vh;overflow-y:auto;margin-top:10px;display:flex;flex-direction:column;gap:6px;';
+    wrap.appendChild(inp); wrap.appendChild(list);
+    box.insertBefore(wrap, actions);
+    const close = (val)=>{ overlay.classList.remove('show'); wrap.remove(); resolve(val); };
+    const row = (main, sub, onClick)=>{
+      const r = document.createElement('button'); r.type = 'button'; r.className = 'disc-pick-row';
+      const a = document.createElement('div'); a.textContent = main;
+      const d = document.createElement('div'); d.className = 'muted-small'; d.textContent = sub;
+      r.appendChild(a); r.appendChild(d);
+      r.addEventListener('click', onClick);
+      list.appendChild(r);
+    };
+    const copyLine = (c)=> [batchLabel(c.b), '成本 ' + fmtMoney(c.it.cost || 0), c.it.catNo, c.it.note].filter(Boolean).join('　');
+    const showCopies = (g)=>{
+      msg.textContent = g.artist + ' - ' + (g.album || '?') + '：有 ' + g.copies.length + ' 張，這張來自哪一批？';
+      inp.style.display = 'none'; list.innerHTML = '';
+      g.copies.forEach(c => row(batchLabel(c.b), copyLine(c).replace(batchLabel(c.b) + '　', ''), ()=> close(c)));
+      backBtn.style.display = '';
+    };
+    const pickGroup = (g)=>{ if(g.copies.length === 1) close(g.copies[0]); else showCopies(g); };
+    const fold = (x)=> x.replace(/[^\p{L}\p{N}]+/gu, '');
+    let shown = [];
+    const render = ()=>{
+      const toks = inp.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      shown = groups.filter(g=>{
+        const hay = (g.artist + ' ' + g.album + ' ' + g.copies.map(c => c.it.catNo || '').join(' ')).toLowerCase();
+        return toks.every(t => hay.indexOf(t) !== -1 || (fold(t) && fold(hay).indexOf(fold(t)) !== -1));
+      });
+      list.innerHTML = '';
+      if(!shown.length){
+        const p = document.createElement('div'); p.className = 'muted-small'; p.style.padding = '8px 2px';
+        p.textContent = '沒有符合的待上架片（已上架、或已經放在別格的不會列出來）'; list.appendChild(p); return;
+      }
+      shown.slice(0, 100).forEach(g => row(g.artist + ' - ' + (g.album || '?'),
+        g.copies.length === 1 ? copyLine(g.copies[0]) : g.copies.length + ' 張：' + g.copies.map(c => batchLabel(c.b)).join('、'),
+        ()=> pickGroup(g)));
+    };
+    inp.addEventListener('input', render);
+    inp.addEventListener('keydown', (e)=>{ if(e.key === 'Enter' && !e.isComposing && shown.length === 1) pickGroup(shown[0]); });
+    const backBtn = document.createElement('button'); backBtn.className = 'ghost'; backBtn.textContent = '← 回到搜尋';
+    backBtn.style.display = 'none';
+    backBtn.addEventListener('click', ()=>{ msg.textContent = title; inp.style.display = ''; backBtn.style.display = 'none'; render(); inp.focus(); });
+    const cancelBtn = document.createElement('button'); cancelBtn.className = 'ghost'; cancelBtn.textContent = '取消';
+    cancelBtn.addEventListener('click', ()=> close(null));
+    actions.appendChild(backBtn); actions.appendChild(cancelBtn);
+    render();
+    overlay.classList.add('show');
+    setTimeout(()=> inp.focus(), 30);
+  });
+}
+// 查版本（查過的不再查）＋多版本讓人選，結果記在那片上
+async function resolveDiscEdition(it, btn){
   if(it.catNo && !it.lookup){
     const label = btn.textContent;
     btn.disabled = true; btn.textContent = '查詢版本中…';
@@ -4408,6 +4480,29 @@ async function pullBatchIntoQuickAdd(){
   }
   await pickEditionFor(it);
   await saveBatches();
+}
+// 出貨看板某一格：挑一張放進來。照片、標價、曲風等你自己填的不動
+async function pickDiscForSlot(i){
+  const pick = await uiDiscPicker('第 ' + (i + 1) + ' 格要放哪一張？打藝人、專輯或編號搜尋');
+  if(!pick) return;
+  const { b, it } = pick;
+  await resolveDiscEdition(it, document.getElementById(`slotpull-${i}`));
+  Object.assign(composerState[i], { artist: it.artist, album: it.album || '', cost: String(it.cost || 0),
+    source: b.source || '', notes: discNotes(it), batchRef: b.id + '/' + it.id });
+  hydrateComposerUI();
+  refreshCardFilledState(i);
+}
+
+// ---- 上架清單「新增上架商品」：從進貨批次帶入一片 ----
+let _lstBatchRef = '';
+function renderLstBatchChip(){
+  fillBatchChip(document.getElementById('lstBatchChip'), _lstBatchRef, ()=>{ _lstBatchRef = ''; renderLstBatchChip(); });
+}
+async function pullBatchIntoQuickAdd(){
+  const pick = await uiDiscPicker('要上架哪一張？打藝人、專輯或編號搜尋');
+  if(!pick) return;
+  const { b, it } = pick;
+  await resolveDiscEdition(it, document.getElementById('lstPullBatchBtn'));
   document.getElementById('lstArtist').value = it.artist || '';
   document.getElementById('lstAlbum').value = it.album || '';
   document.getElementById('lstCost').value = String(it.cost || 0);
