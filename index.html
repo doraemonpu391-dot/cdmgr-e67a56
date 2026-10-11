@@ -405,13 +405,15 @@
       </div>
 
       <div class="wish-sub">批量</div>
-      <div class="muted-small" style="margin-bottom:8px;">每行一張「藝人 - 專輯」，要記編號就寫「藝人 - 專輯 | 編號」。可以拍一張那疊 CD 的照片，按「複製 AI 咒語」連同照片丟給 Claude／ChatGPT，把它列出來的清單貼回來。</div>
+      <div class="muted-small" style="margin-bottom:8px;">每行一張，格式「藝人 - 專輯 | 編號 | 價格」，編號和價格可以省略。也可以照你習慣的寫法「藝人 - 專輯 編號 $價格」直接貼，按「套用格式」先看編號、價格有沒有拆對。名字有錯字或全小寫的，先按「複製 AI 整理咒語」交給 Claude／ChatGPT 修正；拍照的用「照片列清單」那顆。</div>
       <div class="dl-row" style="margin-top:0;">
+        <button class="secondary" id="batchCopyTextPromptBtn" type="button">複製 AI 整理咒語（手打清單）</button>
         <button class="secondary" id="batchCopyPromptBtn" type="button">複製 AI 咒語（照片列清單）</button>
         <span class="copy-hint" id="batchPromptHint">已複製！貼給 AI 並附上照片</span>
       </div>
-      <textarea id="batchPasteBox" class="mono-box" style="min-height:120px;" placeholder="Coldplay - Parachutes | 7243 5 27783 2 5&#10;Radiohead - OK Computer | TOCP-50201"></textarea>
+      <textarea id="batchPasteBox" class="mono-box" style="min-height:120px;" placeholder="Coldplay - Parachutes | 7243 5 27783 2 5 | 100&#10;the chemical brothers - dig your own hole vjcp-25292 $150"></textarea>
       <div class="dl-row">
+        <button class="secondary" id="batchFormatBtn" type="button">套用格式</button>
         <button class="primary" id="batchPasteBtn" type="button">加入這批</button>
         <span class="copy-hint" id="batchHint" style="color:var(--gold);"></span>
       </div>
@@ -3996,6 +3998,26 @@ function allocateBatchCosts(b){
 
 // ---- 批量貼上：「藝人 - 專輯」或「藝人 - 專輯 | 編號」（逐張模式可再接「| 價格」）----
 // 一行就是一張，不做逗號拆分（專輯名稱可能有逗號）
+// 價格：$128、NT$128、128元、1,280 都只留數字
+function cleanPrice(s){ const m = String(s || '').replace(/,/g, '').match(/\d+(?:\.\d+)?/); return m ? m[0] : ''; }
+// 沒用「|」分隔時，從專輯尾巴拆出編號：「dig your own hole vjcp-25292」→ 專輯 dig your own hole、編號 VJCP-25292
+//   - 從尾巴往前收「含數字的字」（31453 1825-2 這種分兩段的也收）
+//   - 前面緊接全大寫英文（CK 35647、CDP 7 46034 2）一起收，收到就停——所以 vol. 1 CK 35647 的「1」不會被吃掉
+//   - 專輯至少留一個字（Prince - 1999、Blur - 13 TOCP-1234）
+//   - 收到的要像編號：至少 4 個數字、不是單獨一個年份；不像就整段還給專輯（Now 45、Viva la Vida 2008）
+// 小寫前綴不收：「shine on 7567-93591-5」的 on 會被誤認成編號開頭
+function splitTrailingCatNo(text){
+  const t = String(text || '').trim();
+  const toks = t.split(/\s+/);
+  let k = toks.length;
+  while(k > 1 && /\d/.test(toks[k - 1])) k--;
+  if(k < toks.length && k > 1 && /^[A-Z]{1,5}$/.test(toks[k - 1])) k--;
+  let cat = toks.slice(k);
+  if(cat.length > 1 && /^(19|20)\d\d$/.test(cat[0]) && /[A-Za-z]/.test(cat.slice(1).join(''))){ cat = cat.slice(1); k++; }
+  const catStr = cat.join(' ');
+  if(!catStr || (catStr.match(/\d/g) || []).length < 4 || /^(19|20)\d\d$/.test(catStr)) return { album: t, catNo: '' };
+  return { album: toks.slice(0, k).join(' '), catNo: catStr.toUpperCase() };
+}
 function parseBatchLines(text){
   const out = [];
   String(text || '').split(/\r?\n/).forEach(raw=>{
@@ -4004,15 +4026,48 @@ function parseBatchLines(text){
     line = line.replace(/^(?:[-*•・‧]\s+|\d+\s*[.)、．]\s*)/, '').trim();
     if(!line) return;
     const segs = line.split(/\s*[|｜]\s*/);
-    const head = segs[0];
+    let head = segs[0], catNo = (segs[1] || '').trim(), price = cleanPrice(segs[2]);
+    const free = segs.length === 1;          // 沒有「|」＝自己習慣的寫法「藝人 - 專輯 編號 $價格」
+    if(free){
+      const pm = head.match(/\s*(?:NT)?\$\s*([\d,]+(?:\.\d+)?)\s*$|\s+([\d,]+(?:\.\d+)?)\s*元\s*$/i);
+      if(pm){ price = cleanPrice(pm[1] || pm[2]); head = head.slice(0, pm.index).trim(); }
+    }
     const m = head.match(/^(.+?)(?:\s+[-–—－]\s*|\s*[-–—－]\s+)(.*)$/);
     const artist = (m ? m[1] : head).trim();
-    const album = (m ? m[2] : '').trim();
+    let album = (m ? m[2] : '').trim();
     if(!artist) return;
-    out.push({ artist, album, catNo: (segs[1] || '').trim(), price: (segs[2] || '').trim() });
+    if(free && album){ const sp = splitTrailingCatNo(album); album = sp.album; catNo = sp.catNo; }
+    out.push({ artist, album, catNo, price });
   });
   return out;
 }
+// 「套用格式」：把拆好的結果寫回輸入框，讓你先看編號、價格有沒有拆對
+function formatBatchLine(d){
+  let s = d.artist + (d.album ? ' - ' + d.album : '');
+  if(d.catNo || d.price) s += ' | ' + (d.catNo || '');
+  if(d.price) s += ' | ' + d.price;
+  return s;
+}
+
+const BATCH_TEXT_AI_PROMPT = [
+  '以下是我手打的 CD 進貨清單，可能有錯字、全小寫或簡寫。請幫我整理成可以匯入的格式，每行一張：',
+  '',
+  '藝人 - 專輯 | 編號 | 價格',
+  '',
+  '1. 藝人和專輯中間是半形空格、減號、空格；編號、價格前面各是半形「 | 」',
+  '2. 我常打錯字，請逐行檢查團名和專輯名稱，對照實際發行的正式名稱，修正拼字、大小寫和標點，'
+    + '例如 madna → MDNA、wasting lights → Wasting Light、blink 182 → blink-182、earth wind and fire → Earth, Wind & Fire',
+  '   （編號可以幫你確認是哪一張；團名、專輯、編號三者對不起來時，不要硬改，照下面第 7 點標「（？）」）',
+  '3. 編號照我寫的抄，只把英文字母改成大寫（例如 vjcp-25292 → VJCP-25292）；不要改數字、不要自己查或補編號',
+  '4. 價格只寫數字，去掉 $ 符號（例如 $128 → 128）',
+  '5. 沒寫編號的寫成「藝人 - 專輯 |  | 價格」；沒寫價格的省略最後的「 | 價格」',
+  '6. 順序照原樣，不要重新排序，也不要合併重複的（同一張可能真的買了兩片）',
+  '7. 真的無法確定是哪張的，保留原文並在專輯名稱後面加上「（？）」，不要自己猜',
+  '8. 只輸出清單本身：不要編號、不要項目符號、不要任何說明文字',
+  '',
+  '清單如下：',
+  ''
+].join('\n');
 
 const BATCH_AI_PROMPT = [
   '附上的照片是一疊 CD。請幫我列出每一張，格式固定為：',
@@ -4090,6 +4145,22 @@ function resolveBatchTarget(){
 }
 async function commitDiscs(discs){
   if(!discs.length){ batchFlash('沒有可以加入的片'); return false; }
+  // 有寫每張價格，但這批是「整批平均」→ 價格會被忽略、成本變成付款÷張數。
+  // 新批次又沒填付款：直接改逐張；其他情況問一下
+  let switched = false;
+  if(discs.some(d => d.price)){
+    const cur = currentBatch();
+    if(!cur && document.getElementById('batchMode').value !== 'each'){
+      if(!document.getElementById('batchPaid').value.trim()
+         || await uiConfirm('你貼的清單有寫每張價格，但新批次選的是「整批平均」並填了付款金額。\n\n要改成「逐張填寫」，用每張的價格算成本嗎？')){
+        document.getElementById('batchMode').value = 'each'; switched = true;
+      }
+    } else if(cur && cur.mode !== 'each'){
+      if(await uiConfirm('「' + batchLabel(cur) + '」是「整批平均」，你貼的清單有寫每張價格。\n\n要把這批改成「逐張填寫」，用每張的價格算成本嗎？')){
+        cur.mode = 'each'; switched = true;
+      }
+    }
+  }
   const b = resolveBatchTarget();
   discs.forEach(d => b.items.push({ id: genId(), artist: d.artist, album: d.album || '', catNo: d.catNo || '',
                                      note: d.note || '', price: d.price || '', cost: 0, listingId: '' }));
@@ -4099,7 +4170,10 @@ async function commitDiscs(discs){
   refreshBatchForm(b.id);       // 接下來的新增繼續進這一批
   renderBatches();
   const hits = batchWishHits(b);
+  const noPrice = b.mode === 'each' ? discs.filter(d => !d.price).length : 0;
   batchFlash('已加入「' + batchLabel(b) + '」：' + discs.length + ' 張'
+    + (switched ? '（已改成逐張填寫）' : '')
+    + (noPrice ? '　' + noPrice + ' 張沒寫價格，成本先算 0' : '')
     + (hits.length ? '　★ 其中 ' + hits.length + ' 張有客人在找' : ''));
   return true;
 }
@@ -4366,7 +4440,21 @@ document.getElementById('batchPasteBtn').addEventListener('click', async ()=>{
   if(await commitDiscs(parseBatchLines(document.getElementById('batchPasteBox').value)))
     document.getElementById('batchPasteBox').value = '';
 });
+document.getElementById('batchCopyTextPromptBtn').addEventListener('click', async ()=>{
+  const h = document.getElementById('batchPromptHint');
+  h.textContent = '已複製！貼給 AI 後，在後面接上你的清單';
+  await copyText(BATCH_TEXT_AI_PROMPT, h);
+});
+document.getElementById('batchFormatBtn').addEventListener('click', ()=>{
+  const box = document.getElementById('batchPasteBox');
+  const discs = parseBatchLines(box.value);
+  if(!discs.length){ batchFlash('沒有可以整理的行'); return; }
+  box.value = discs.map(formatBatchLine).join('\n');
+  const noCat = discs.filter(d => !d.catNo).length;
+  batchFlash('已整理 ' + discs.length + ' 行' + (noCat ? '（' + noCat + ' 行沒有編號）' : '') + '，對一下編號有沒有切對，再按「加入這批」');
+});
 document.getElementById('batchCopyPromptBtn').addEventListener('click', async ()=>{
+  document.getElementById('batchPromptHint').textContent = '已複製！貼給 AI 並附上照片';
   await copyText(BATCH_AI_PROMPT, document.getElementById('batchPromptHint'));
 });
 document.getElementById('batchSearch').addEventListener('input', renderBatches);
