@@ -56,7 +56,7 @@
   .stat-box .value{font-family:'JetBrains Mono',monospace;font-size:20px;color:var(--gold);margin-top:4px;}
 
   label.field{display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;letter-spacing:.5px;}
-  input[type=text],input[type=number],input[type=date],input[type=datetime-local],select,textarea{
+  input[type=text],input[type=tel],input[type=number],input[type=date],input[type=datetime-local],select,textarea{
     background:#14151c;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;
     font-family:'Noto Sans TC',sans-serif;font-size:13px;outline:none;transition:border-color .15s ease;width:100%;
   }
@@ -689,9 +689,10 @@
           <div><label class="field">運送方式</label><select id="orderShippingSel"></select></div>
           <div class="meet-field" style="display:none;"><label class="field">面交時間</label><input type="datetime-local" id="orderMeetAt"></div>
           <div class="meet-field" style="display:none;"><label class="field">面交地點</label><input type="text" id="orderMeetPlace" placeholder="例如：板橋站 / 光華商場"></div>
-          <div class="store-field" style="display:none;"><label class="field">收件人姓名</label><input type="text" id="orderRecipient" placeholder="需與取貨證件相符"></div>
-          <div class="store-field" style="display:none;"><label class="field">收件人電話</label><input type="tel" id="orderRecipientPhone" placeholder="09xx-xxx-xxx"></div>
+          <div class="recip-field" style="display:none;"><label class="field">收件人姓名</label><input type="text" id="orderRecipient" placeholder="需與取貨證件相符"></div>
+          <div class="recip-field" style="display:none;"><label class="field">收件人電話</label><input type="tel" id="orderRecipientPhone" placeholder="09xx-xxx-xxx"></div>
           <div class="store-field" style="display:none;"><label class="field">取貨門市</label><input type="text" id="orderPickupStore" placeholder="例如：板橋文化門市"></div>
+          <div class="mail-field" style="display:none;grid-column:span 2;"><label class="field">收件地址</label><input type="text" id="orderAddress" placeholder="郵遞區號＋完整地址"></div>
           <div><label class="field">付款狀態</label><select id="orderPaymentSel"></select></div>
           <div><label class="field">訂單編號（選填）</label><input type="text" id="orderNoInput"></div>
           <div><label class="field">訂單金額（可調整）</label><input type="number" id="orderAmount" min="0"></div>
@@ -948,6 +949,9 @@ const SHIPPING_METHODS = ['7-11店到店', '全家店到店', '賣貨便', '面�
 //（見 loadShipMethods 的註解：不吃外部改的名稱），所以可以直接字串比對。
 const STORE_PICKUP_METHODS = ['7-11店到店', '全家店到店'];
 function isStorePickup(name){ return STORE_PICKUP_METHODS.indexOf(name) !== -1; }
+// 郵寄要寫收件人、電話、地址（同樣是程式碼裡固定的名稱）
+function isMail(name){ return name === '郵寄'; }
+function needsRecipient(name){ return isStorePickup(name) || isMail(name); }
 
 // ---- 優惠規則 ----
 // 一條規則＝「[每|滿] N [件|元] → [折 M 元 | 打 X 折 | 免運]」。
@@ -2751,6 +2755,7 @@ document.getElementById('createOrderBtn').addEventListener('click', async ()=>{
   document.getElementById('orderRecipient').value = '';
   document.getElementById('orderRecipientPhone').value = '';
   document.getElementById('orderPickupStore').value = '';
+  document.getElementById('orderAddress').value = '';
   updateShippingFields();
 
   orderPanel.classList.add('show');
@@ -2978,11 +2983,14 @@ function applyOrderPromo(){
   if(discEl) discEl.value = r.lines.map(l => l.name + (l.times > 1 ? '×' + l.times : '') + ' −' + fmtMoney(l.amount)).join('、');
 }
 
-// 依運送方式顯示對應的額外欄位：面交→時間/地點；店到店→收件人/電話/門市
+// 依運送方式顯示對應的額外欄位：面交→時間/地點；店到店→收件人/電話/門市；郵寄→收件人/電話/地址
 function updateShippingFields(){
   const v = document.getElementById('orderShippingSel').value;
   document.querySelectorAll('.meet-field').forEach(el => el.style.display = (v === '面交') ? '' : 'none');
+  document.querySelectorAll('.recip-field').forEach(el => el.style.display = needsRecipient(v) ? '' : 'none');
   document.querySelectorAll('.store-field').forEach(el => el.style.display = isStorePickup(v) ? '' : 'none');
+  document.querySelectorAll('.mail-field').forEach(el => el.style.display = isMail(v) ? '' : 'none');
+  document.getElementById('orderRecipient').placeholder = isMail(v) ? '收件人全名' : '需與取貨證件相符';
 }
 document.getElementById('orderShippingSel').addEventListener('change', ()=>{ updateShippingFields(); applyOrderPromo(); });
 
@@ -3019,9 +3027,10 @@ document.getElementById('confirmOrderBtn').addEventListener('click', async ()=>{
     shipping: document.getElementById('orderShippingSel').value,
     meetAt: document.getElementById('orderShippingSel').value === '面交' ? (document.getElementById('orderMeetAt').value || '') : '',
     meetPlace: document.getElementById('orderShippingSel').value === '面交' ? document.getElementById('orderMeetPlace').value.trim() : '',
-    recipient: isStorePickup(document.getElementById('orderShippingSel').value) ? document.getElementById('orderRecipient').value.trim() : '',
-    recipientPhone: isStorePickup(document.getElementById('orderShippingSel').value) ? document.getElementById('orderRecipientPhone').value.trim() : '',
+    recipient: needsRecipient(document.getElementById('orderShippingSel').value) ? document.getElementById('orderRecipient').value.trim() : '',
+    recipientPhone: needsRecipient(document.getElementById('orderShippingSel').value) ? document.getElementById('orderRecipientPhone').value.trim() : '',
     pickupStore: isStorePickup(document.getElementById('orderShippingSel').value) ? document.getElementById('orderPickupStore').value.trim() : '',
+    address: isMail(document.getElementById('orderShippingSel').value) ? document.getElementById('orderAddress').value.trim() : '',
     orderNo: document.getElementById('orderNoInput').value.trim(),
     // 免運折抵掉的運費金額。訂單金額是「已經扣掉它」的內部數字（運費我方吸收），
     // 但客人實際要付的是沒扣的那個數，揀貨明細要用它加回來，所以存起來。
@@ -3111,10 +3120,11 @@ function openPickModal(order){
     d.appendChild(k); d.appendChild(v); info.appendChild(d);
   };
   line('訂單編號', order.orderNo);
-  if(isStorePickup(order.shipping)){
+  if(needsRecipient(order.shipping)){
     line(order.shipping + ' 收件人', order.recipient, true);
     line('收件人電話', order.recipientPhone, true);
-    line('取貨門市', order.pickupStore, true);
+    if(isMail(order.shipping)) line('收件地址', order.address, true);
+    else line('取貨門市', order.pickupStore, true);
   }
 
   const body = document.getElementById('pickBody'); body.innerHTML = '';
@@ -4598,9 +4608,10 @@ function renderOrders(){
       mp.addEventListener('change', ()=>{ order.meetPlace = mp.value.trim(); persist(); });
       mw.appendChild(mt); mw.appendChild(mp); tdShipping.appendChild(mw);
     }
-    if(isStorePickup(order.shipping)){
+    if(needsRecipient(order.shipping)){
       const sw = document.createElement('div'); sw.style.cssText = 'margin-top:5px;display:flex;flex-direction:column;gap:4px;';
-      [['recipient','收件人姓名'], ['recipientPhone','收件人電話'], ['pickupStore','取貨門市']].forEach(([key, ph])=>{
+      [['recipient','收件人姓名'], ['recipientPhone','收件人電話'],
+       isMail(order.shipping) ? ['address','收件地址'] : ['pickupStore','取貨門市']].forEach(([key, ph])=>{
         const inp = document.createElement('input'); inp.type = 'text';
         inp.value = order[key] || ''; inp.placeholder = ph; inp.title = ph;
         inp.className = 'cell-input'; inp.style.cssText = 'font-size:12px;';
