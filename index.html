@@ -555,6 +555,7 @@
         <div id="lstAuctionWrap" style="display:none;"><label class="field">截標時間（競標）</label><input type="datetime-local" id="lstAuctionEnd"></div>
         <div style="display:flex;gap:18px;flex-wrap:wrap;">
           <label class="field check-row" style="margin-top:6px;"><input type="checkbox" id="lstSideLabel"> 有側標</label>
+          <label class="field check-row" style="margin-top:6px;" title="贈品：不計入任何優惠門檻"><input type="checkbox" id="lstGift"> 贈品</label>
           <label class="field check-row" style="margin-top:6px;" title="只留在後台，不會出現在公開商品頁"><input type="checkbox" id="lstNotPublic"> 🔒 不公開</label>
           <label class="field check-row" style="margin-top:6px;" title="殘次／已特價品：不計入滿件與滿額門檻，也不會被折扣"><input type="checkbox" id="lstNoPromo"> 不參與優惠</label>
         </div>
@@ -625,7 +626,7 @@
 
       <div class="relist-panel" id="editPanel">
         <div style="font-weight:700;margin-bottom:10px;color:var(--gold);">編輯選取項目 <span class="muted-small" id="editCountLabel"></span></div>
-        <div class="muted-small" style="margin-bottom:10px;">文字欄位留空＝不修改該欄位。只勾選一筆時會自動帶入原值，可直接補漏（例如忘了勾的上架平台）。</div>
+        <div class="muted-small" style="margin-bottom:10px;">只勾選一筆時會帶入原值：直接改，<b>欄位清空＝刪掉那個內容</b>（例如備註）。勾選多筆時欄位一開始是空的，<b>留空＝不修改</b>。</div>
         <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
           <div><label class="field">藝人名稱</label><input type="text" id="edtArtist"></div>
           <div><label class="field">專輯名稱</label><input type="text" id="edtAlbum"></div>
@@ -657,6 +658,12 @@
             <label><input type="radio" name="editSide" value="keep" checked> 不修改</label>
             <label><input type="radio" name="editSide" value="yes"> 有側標</label>
             <label><input type="radio" name="editSide" value="no"> 無側標</label>
+          </div>
+          <div class="bidtype-checks" style="grid-column:1/-1;flex-wrap:wrap;">
+            <span style="font-size:12px;color:var(--text-muted);align-self:center;">贈品：</span>
+            <label><input type="radio" name="editGift" value="keep" checked> 不修改</label>
+            <label><input type="radio" name="editGift" value="yes"> 是贈品</label>
+            <label><input type="radio" name="editGift" value="no"> 不是贈品</label>
           </div>
           <div class="bidtype-checks" style="grid-column:1/-1;flex-wrap:wrap;">
             <span style="font-size:12px;color:var(--text-muted);align-self:center;">優惠：</span>
@@ -1085,7 +1092,7 @@ function listingTaxonomyText(l){
 
 const composerState = Array.from({length: SLOTS}, () => ({
   imgSrc:null, artist:'', album:'', price:'', notes:'', region:'', genre:'', subgenre:'', cost:'', source:'',
-  sideLabel:false, platforms:[], biddingType:'', auctionEnd:'', batchRef:''
+  sideLabel:false, gift:false, platforms:[], biddingType:'', auctionEnd:'', batchRef:''
 }));
 
 let listings = [];
@@ -1418,6 +1425,7 @@ function buildCards(){
       </div>
       <div class="field-group"><div class="notes-head"><label class="field">備注（選填）</label><button type="button" class="small-icon" id="edlookup-${i}" title="輸入編號（可加 IFPI、國別），查年份和發行國寫進備註">🔍 查版本</button></div><textarea id="notes-${i}" style="min-height:44px;"></textarea></div>
       <label class="check-row"><input type="checkbox" id="sidelabel-${i}"> 有側標</label>
+      <label class="check-row" title="贈品：不計入任何優惠門檻"><input type="checkbox" id="gift-${i}"> 贈品</label>
       <div class="mini-checks">
         ${PLATFORMS.map(p=>`<label><input type="checkbox" class="cplat-${i}" value="${p}"> ${p}</label>`).join('')}
       </div>
@@ -1451,6 +1459,7 @@ function buildCards(){
     fillSourceSelect(document.getElementById(`source-${i}`), composerState[i].source);
     wireSourceSelect(document.getElementById(`source-${i}`), (v)=>{ composerState[i].source = v; refreshCardFilledState(i); });
     document.getElementById(`sidelabel-${i}`).addEventListener('change', (e)=>{ composerState[i].sideLabel = e.target.checked; });
+    document.getElementById(`gift-${i}`).addEventListener('change', (e)=>{ composerState[i].gift = e.target.checked; });
     document.querySelectorAll(`.cplat-${i}`).forEach(cb=>{
       cb.addEventListener('change', ()=>{
         composerState[i].platforms = Array.from(document.querySelectorAll(`.cplat-${i}:checked`)).map(x=>x.value);
@@ -1509,6 +1518,7 @@ function hydrateComposerUI(){
     const srcSel = document.getElementById(`source-${i}`); if(srcSel) fillSourceSelect(srcSel, s.source);
     renderBatchChip(i);
     const sl = document.getElementById(`sidelabel-${i}`); if(sl) sl.checked = !!s.sideLabel;
+    const gf = document.getElementById(`gift-${i}`); if(gf) gf.checked = !!s.gift;
     document.querySelectorAll(`.cplat-${i}`).forEach(cb=>{ cb.checked = (s.platforms||[]).includes(cb.value); });
     document.querySelectorAll(`input[name="cbid-${i}"]`).forEach(r=>{ r.checked = (r.value === s.biddingType); });
     const wrap = document.getElementById(`auctionwrap-${i}`);
@@ -1654,18 +1664,19 @@ async function generateComposite(){
       });
     }
 
-    // Side-label chip sits above the text block, clear of all text
-    if(s.sideLabel){
+    // 側標／贈品標籤疊在文字區上方，不壓到任何文字
+    const chips = [s.sideLabel ? '☑️側標' : '', s.gift ? '贈品' : ''].filter(Boolean);
+    chips.forEach((label, ci)=>{
       const chipW = 128, chipH = 34;
       const chipX = x + CELL - chipW - 14;
-      const chipY = barY - chipH - 12;
+      const chipY = barY - (chipH + 12) * (chips.length - ci);
       ctx.fillStyle = 'rgba(18,19,25,0.85)';
       roundRect(ctx, chipX, chipY, chipW, chipH, 8);
       ctx.fill();
       ctx.strokeStyle = '#e8b94a55'; ctx.lineWidth = 1; ctx.stroke();
       ctx.fillStyle = '#e8b94a'; ctx.font = '700 19px "Noto Sans TC"'; ctx.textAlign = 'center';
-      ctx.fillText('☑️側標', chipX+chipW/2, chipY+chipH/2+6);
-    }
+      ctx.fillText(label, chipX+chipW/2, chipY+chipH/2+6);
+    });
 
     ctx.restore();
   }
@@ -1782,6 +1793,7 @@ async function buildListingFormText(){
       `子曲風: ${s.subgenre||''}`,
       `備注: ${s.notes||''}`,
       `側標: ${s.sideLabel ? '是' : '否'}`,
+      `贈品: ${s.gift ? '是' : '否'}`,
       `類型: ${s.biddingType||''}`,
       `截標時間: ${s.auctionEnd||''}`,
       `平台: ${(s.platforms||[]).join(', ')}`,
@@ -2008,6 +2020,7 @@ document.getElementById('addListingBtn').addEventListener('click', async ()=>{
   const sideLabel = document.getElementById('lstSideLabel').checked;
   const notPublic = document.getElementById('lstNotPublic').checked;
   const noPromo = document.getElementById('lstNoPromo').checked;
+  const gift = document.getElementById('lstGift').checked;
   const biddingType = bidTypeEl ? bidTypeEl.value : '';
   const auctionEnd = biddingType === '競標' ? document.getElementById('lstAuctionEnd').value : '';
 
@@ -2018,7 +2031,7 @@ document.getElementById('addListingBtn').addEventListener('click', async ()=>{
   const item = {
     id: newId, artist, album, price, cost, source, notes, platforms,
     regions, genres, subgenres,
-    biddingType, auctionEnd, sideLabel, notPublic, noPromo, hasImage: !!_lstPendingImg,
+    biddingType, auctionEnd, sideLabel, notPublic, noPromo, gift, hasImage: !!_lstPendingImg,
     status: '在售', dateAdded: todayStr()
   };
   listings.push(item);
@@ -2037,6 +2050,7 @@ document.getElementById('addListingBtn').addEventListener('click', async ()=>{
   document.getElementById('lstSideLabel').checked = false;
   document.getElementById('lstNotPublic').checked = false;
   document.getElementById('lstNoPromo').checked = false;
+  document.getElementById('lstGift').checked = false;
   document.getElementById('lstAuctionWrap').style.display = 'none';
 
   renderListings();
@@ -2058,7 +2072,7 @@ function parseListingFormText(text){
     if(!obj['藝人'] && !obj['專輯']) return;
     const id = genId();
     results.push({
-      id, artist: obj['藝人']||'', album: obj['專輯']||'', price: obj['標價']||'',
+      id, artist: obj['藝人']||'', album: obj['專輯']||'', price: obj['標價']||'', gift: obj['贈品']==='是',
       cost: obj['成本']||'', source: obj['貨源']||'', notes: obj['備注']||'',
       regions: parseTags(obj['地區']||obj['地區/語言']||''),
       genres: parseTags(obj['大類']||obj['Genre']||''),
@@ -2412,7 +2426,9 @@ function renderListings(){
     }
     tr.appendChild(tdAuction);
 
-    const tdSideLabel = document.createElement('td'); tdSideLabel.textContent = item.sideLabel ? '☑️側標' : '—'; tr.appendChild(tdSideLabel);
+    const tdSideLabel = document.createElement('td');
+    tdSideLabel.textContent = [item.sideLabel ? '☑️側標' : '', item.gift ? '贈品' : ''].filter(Boolean).join(' ') || '—';
+    tr.appendChild(tdSideLabel);
     const tdDate = document.createElement('td'); tdDate.textContent = item.dateAdded || '—'; tr.appendChild(tdDate);
 
     const tdStatus = document.createElement('td');
@@ -2589,24 +2605,31 @@ function resetEditPanel(){
   document.querySelector('input[name="editBidMode"][value="keep"]').checked = true;
   document.getElementById('editAuctionWrap').style.display = 'none';
   document.querySelector('input[name="editSide"][value="keep"]').checked = true;
+  document.querySelector('input[name="editGift"][value="keep"]').checked = true;
   document.querySelector('input[name="editPromo"][value="keep"]').checked = true;
   document.querySelector('input[name="editPublic"][value="keep"]').checked = true;
   document.getElementById('edtStatus').value = 'keep';
 }
+// 單筆編輯時面板帶入原值，欄位內容就是要存的值（清空＝刪掉）；多筆時留空＝不改。
+// 記住是哪一筆被帶入，套用時才知道要用哪一種規則。
+let _editPrefilledId = '';
 document.getElementById('batchEditBtn').addEventListener('click', async ()=>{
   if(selectedListingIds.size === 0){ await uiAlert('請先勾選要編輯的商品'); return; }
   resetEditPanel();
   relistPanel.classList.remove('show');
   orderPanel.classList.remove('show');
   document.getElementById('editCountLabel').textContent = `（已選 ${selectedListingIds.size} 筆）`;
+  _editPrefilledId = '';
+  fillSourceSelect(document.getElementById('edtSource'), '', '（不改）');
   if(selectedListingIds.size === 1){
     const it = listings.find(l => selectedListingIds.has(l.id));
     if(it){
+      _editPrefilledId = it.id;
       document.getElementById('edtArtist').value = it.artist || '';
       document.getElementById('edtAlbum').value = it.album || '';
       document.getElementById('edtPrice').value = it.price || '';
       document.getElementById('edtCost').value = it.cost || '';
-      fillSourceSelect(document.getElementById('edtSource'), it.source || '', '（不改）');
+      fillSourceSelect(document.getElementById('edtSource'), it.source || '');
       document.getElementById('edtRegion').value = tagsToStr(it.regions);
       document.getElementById('edtGenre').value = tagsToStr(it.genres);
       document.getElementById('edtSub').value = tagsToStr(it.subgenres);
@@ -2622,6 +2645,7 @@ document.getElementById('batchEditBtn').addEventListener('click', async ()=>{
         }
       }
       document.querySelector(`input[name="editSide"][value="${it.sideLabel ? 'yes' : 'no'}"]`).checked = true;
+      document.querySelector(`input[name="editGift"][value="${it.gift ? 'yes' : 'no'}"]`).checked = true;
       document.getElementById('edtStatus').value = it.status || 'keep';
     }
   }
@@ -2633,6 +2657,9 @@ document.getElementById('confirmEditBtn').addEventListener('click', async ()=>{
   if(selectedListingIds.size === 0){ resetEditPanel(); return; }
   const val = id => document.getElementById(id).value.trim();
   const fields = { artist: val('edtArtist'), album: val('edtAlbum'), price: val('edtPrice'), cost: val('edtCost'), source: val('edtSource'), notes: val('edtNotes') };
+  const single = selectedListingIds.size === 1 && selectedListingIds.has(_editPrefilledId);
+  const touch = (v) => single || v !== '';          // 單筆：照欄位內容存（含清空）；多筆：留空不改
+  if(single && !fields.artist && !fields.album){ await uiAlert('藝人和專輯至少要留一個'); return; }
   // 三軸曲風：留空＝不改；非空＝以解析後的陣列取代
   const taxRegionRaw = val('edtRegion'), taxGenreRaw = val('edtGenre'), taxSubRaw = val('edtSub');
   const platEnable = document.getElementById('edtPlatformsEnable').checked;
@@ -2640,6 +2667,7 @@ document.getElementById('confirmEditBtn').addEventListener('click', async ()=>{
   const bidMode = (document.querySelector('input[name="editBidMode"]:checked')||{}).value || 'keep';
   const newAuctionEnd = document.getElementById('edtAuctionEnd').value;
   const side = (document.querySelector('input[name="editSide"]:checked')||{}).value || 'keep';
+  const giftMode = (document.querySelector('input[name="editGift"]:checked')||{}).value || 'keep';
   const promoMode = (document.querySelector('input[name="editPromo"]:checked')||{}).value || 'keep';
   const publicMode = (document.querySelector('input[name="editPublic"]:checked')||{}).value || 'keep';
   const status = document.getElementById('edtStatus').value;
@@ -2650,17 +2678,19 @@ document.getElementById('confirmEditBtn').addEventListener('click', async ()=>{
     if(!selectedListingIds.has(item.id)) return;
     // 只有「標價真的被改動」才清掉特價原價。不能只看欄位非空——單選時 edtPrice 會
     // 預先帶入原值（見 openEditPanel），那樣改個備註也會把特價一起清掉。
-    const priceChanged = fields.price !== '' && String(fields.price) !== String(item.price || '');
-    Object.keys(fields).forEach(k=>{ if(fields[k] !== '') item[k] = fields[k]; });
+    const priceChanged = touch(fields.price) && String(fields.price) !== String(item.price || '');
+    Object.keys(fields).forEach(k=>{ if(touch(fields[k])) item[k] = fields[k]; });
     if(priceChanged) item.origPrice = '';
-    if(taxRegionRaw !== '') item.regions = parseTags(taxRegionRaw);
-    if(taxGenreRaw !== '') item.genres = parseTags(taxGenreRaw);
-    if(taxSubRaw !== '') item.subgenres = parseTags(taxSubRaw);
+    if(touch(taxRegionRaw)) item.regions = parseTags(taxRegionRaw);
+    if(touch(taxGenreRaw)) item.genres = parseTags(taxGenreRaw);
+    if(touch(taxSubRaw)) item.subgenres = parseTags(taxSubRaw);
     if(platEnable) item.platforms = plats.slice();
     if(bidMode === '直購'){ item.biddingType = '直購'; item.auctionEnd = ''; }
     else if(bidMode === '競標'){ item.biddingType = '競標'; if(newAuctionEnd) item.auctionEnd = newAuctionEnd; }
     if(side === 'yes') item.sideLabel = true;
     else if(side === 'no') item.sideLabel = false;
+    if(giftMode === 'yes') item.gift = true;
+    else if(giftMode === 'no') item.gift = false;
     if(promoMode === 'no') item.noPromo = true;
     else if(promoMode === 'yes') item.noPromo = false;
     if(publicMode === 'no') item.notPublic = true;
@@ -2684,7 +2714,7 @@ document.getElementById('loadToComposerBtn').addEventListener('click', async ()=
 
   // Reset composer state
   for(let i=0;i<SLOTS;i++){
-    composerState[i] = { imgSrc:null, artist:'', album:'', price:'', notes:'', region:'', genre:'', subgenre:'', cost:'', source:'', sideLabel:false, platforms:[], biddingType:'', auctionEnd:'', batchRef:'' };
+    composerState[i] = { imgSrc:null, artist:'', album:'', price:'', notes:'', region:'', genre:'', subgenre:'', cost:'', source:'', sideLabel:false, gift:false, platforms:[], biddingType:'', auctionEnd:'', batchRef:'' };
   }
   // Fill from selected listings + load images
   for(let i=0;i<selected.length;i++){
@@ -2694,7 +2724,7 @@ document.getElementById('loadToComposerBtn').addEventListener('click', async ()=
       artist: l.artist||'', album: l.album||'', price: l.price||'', notes: l.notes||'',
       region: tagsToStr(l.regions), genre: tagsToStr(l.genres), subgenre: tagsToStr(l.subgenres),
       cost: l.cost||'', source: l.source||'',
-      sideLabel: !!l.sideLabel, platforms: (l.platforms||[]).slice(),
+      sideLabel: !!l.sideLabel, gift: !!l.gift, platforms: (l.platforms||[]).slice(),
       biddingType: l.biddingType||'', auctionEnd: l.auctionEnd||'', batchRef: ''
     };
     const img = await imgGet(l.id);
@@ -2742,7 +2772,7 @@ document.getElementById('createOrderBtn').addEventListener('click', async ()=>{
   document.getElementById('orderBuyer').value = '';
   document.getElementById('orderNoInput').value = '';
   // 標記「不參與優惠」與面議（無標價）的商品不計入門檻、也不被折扣
-  const promoOk = selected.filter(l => !l.noPromo && (parseFloat(l.price) || 0) > 0);
+  const promoOk = selected.filter(l => !l.noPromo && !l.gift && (parseFloat(l.price) || 0) > 0);   // 贈品不參與優惠
   _orderSubtotal = total;
   _promoQty = promoOk.length;
   _promoSub = promoOk.reduce((sum, l) => sum + (parseFloat(l.price) || 0), 0);
@@ -2910,7 +2940,7 @@ document.getElementById('addToOrderBtn').addEventListener('click', async ()=>{
     price: parseFloat(l.price) || 0,
     cost: parseFloat(l.cost) || 0,
     source: l.source || '',
-    noPromo: !!l.noPromo          // 帶進快照，加購時重算優惠才知道哪幾件不參與
+    noPromo: !!l.noPromo || !!l.gift   // 帶進快照，加購時重算優惠才知道哪幾件不參與（贈品一律不參與）
   }));
   const addAmount = newItems.reduce((s, i) => s + i.price, 0);
   const addCost = newItems.reduce((s, i) => s + i.cost, 0);
@@ -3010,7 +3040,7 @@ document.getElementById('confirmOrderBtn').addEventListener('click', async ()=>{
     price: parseFloat(l.price) || 0,
     cost: parseFloat(l.cost) || 0,
     source: l.source || '',
-    noPromo: !!l.noPromo          // 之後加購要重算優惠時，需要知道哪幾件不參與
+    noPromo: !!l.noPromo || !!l.gift   // 之後加購要重算優惠時，需要知道哪幾件不參與（贈品一律不參與）
   }));
   const costField = document.getElementById('orderCost').value;
   const totalCost = (costField !== '' && isFinite(parseFloat(costField)))
@@ -5256,7 +5286,7 @@ async function buildPublishPayload(){
     && l.biddingType !== '競標' && !l.archived && !l.notPublic);
   const items = forSale.map(l => ({
     id: l.id, artist: l.artist, album: l.album, price: l.price, origPrice: l.origPrice || '', noPromo: !!l.noPromo,
-    genre: l.genre, notes: l.notes, sideLabel: l.sideLabel, hasImage: !!l.hasImage,
+    gift: !!l.gift, genre: l.genre, notes: l.notes, sideLabel: l.sideLabel, hasImage: !!l.hasImage,
     regions: Array.isArray(l.regions) ? l.regions : [],
     genres: Array.isArray(l.genres) ? l.genres : [],
     subgenres: Array.isArray(l.subgenres) ? l.subgenres : (l.genre ? [l.genre] : []),
